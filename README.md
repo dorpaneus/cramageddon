@@ -32,16 +32,15 @@ terminal.
 
 ---
 
-## 📚 Tracks
+## 📚 Repository Index
 
-| Track | Certification | Vendor | Exam format | Folder |
-|---|---|---|---|---|
-| **EX280** | Red Hat Certified Specialist in OpenShift Administration | Red Hat | Performance-based | [`ex280/`](./ex280/) |
-| **CKA** | Certified Kubernetes Administrator | CNCF / Linux Foundation | Performance-based | [`cka/`](./cka/) |
-| **KCNA** | Kubernetes and Cloud Native Associate | CNCF / Linux Foundation | Multiple choice | [`kcan/`](./kcan/) |
-| **Terraform Associate** | HashiCorp Certified: Terraform Associate | HashiCorp | Multiple choice | [`terraform/`](./terraform/) |
+| Certification | Focus Areas / Key Topics | Folder Link | Status |
+| :--- | :--- | :--- | :--- |
+| **CKA** | Core Architecture, Scheduling, Networking, Troubleshooting, Etcd | [Explore CKA](./cka) | In Progress |
+| **EX280** | Red Hat OpenShift, RBAC, Operators, Route/Ingress, Security Contexts | [Explore EX280](./ex280) | In Progress |
+| **KCNA** | Cloud-Native Fundamentals, GitOps, CNCF Ecosystem, Observability | [Explore KCNA](./kcna) | In Progress |
+| **Terraform Associate** | IaC, State Management, Modules, Provisioners, Workflows | [Explore Terraform](./terraform) | In Progress |
 
-> 📝 The KCNA folder is spelled `kcan/` — a typo that stuck. Same exam.
 
 ### EX280 — OpenShift Administration
 Targets **OCP 4.18**. One file per official Red Hat objective, each holding YAML manifests,
