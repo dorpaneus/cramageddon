@@ -8,7 +8,7 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 > - The OCP 4.18 product documentation at <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18>
 > - Community labs (`anishrana2001/Openshift`, `mgonzalezo/RedHat_ex280` - both authored for 4.14; every command here has been rewritten for **4.18**).
 
-> **Red Hat rule:** all configurations must **persist after reboot** without intervention. Use `oc`/YAML — never edit files on nodes by hand.
+> **Red Hat rule:** all configurations must **persist after reboot** without intervention. Use `oc`/YAML - never edit files on nodes by hand.
 
 ---
 
