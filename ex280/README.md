@@ -29,7 +29,7 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 *Goal: Move from ad-hoc commands to Infrastructure as Code.*
 
 - [ ] **Lab 2.1:** [From scratch to running (YAML manifests)](02-resource-manifests.md#lab-21--from-scratch-to-running-20-min)
-- [ ] **Lab 2.2:** [Patch storm — set/patch/rollout/label](02-resource-manifests.md#lab-22--patch-storm-15-min)
+- [ ] **Lab 2.2:** [Patch storm - set/patch/rollout/label](02-resource-manifests.md#lab-22--patch-storm-15-min)
 - [ ] **Lab 2.3:** [ConfigMap + Secret end-to-end](02-resource-manifests.md#lab-23--configmap--secret-end-to-end-25-min)
 - [ ] **Lab 2.4:** [Kustomize bases and overlays](02-resource-manifests.md#lab-24--kustomize-base--2-overlays-40-min)
 - **Key Commands:** `oc create ... --dry-run=client -o yaml`, `oc apply -k`, `oc set env`, `oc patch`.
