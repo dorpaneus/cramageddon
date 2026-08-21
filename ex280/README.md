@@ -52,6 +52,17 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 *Goal: Move from ad-hoc commands to Infrastructure as Code.*
 
+**Theory** ([`02-resource-manifests.md`](02-resource-manifests.md)) - YAML anatomy · updating deployments · ConfigMaps · Secrets · Kustomize basics · Kustomize overlays
+
+<details><summary>📋 Official objective coverage (Red Hat)</summary>
+ Deploy applications from YAML resource manifests
+ Update application deployments
+ Deploy applications using Kustomize
+ Work with Kustomize overlays
+ Create and use secrets
+ Create and use configuration maps
+</details>
+
 - [ ] **Lab 2.1:** [From scratch to running (YAML manifests)](02-resource-manifests.md#lab-21--from-scratch-to-running-20-min)
 - [ ] **Lab 2.2:** [Patch storm - set/patch/rollout/label](02-resource-manifests.md#lab-22--patch-storm-15-min)
 - [ ] **Lab 2.3:** [ConfigMap + Secret end-to-end](02-resource-manifests.md#lab-23--configmap--secret-end-to-end-25-min)
