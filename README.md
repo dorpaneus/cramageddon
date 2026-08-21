@@ -36,10 +36,10 @@ terminal.
 
 | Certification | Focus Areas / Key Topics | Folder Link | Status |
 | :--- | :--- | :--- | :--- |
-| **CKA** | Core Architecture, Scheduling, Networking, Troubleshooting, Etcd | [Explore CKA](./cka) | In Progress |
-| **EX280** | Red Hat OpenShift, RBAC, Operators, Route/Ingress, Security Contexts | [Explore EX280](./ex280) | In Progress |
-| **KCNA** | Cloud-Native Fundamentals, GitOps, CNCF Ecosystem, Observability | [Explore KCNA](./kcna) | In Progress |
-| **Terraform Associate** | IaC, State Management, Modules, Provisioners, Workflows | [Explore Terraform](./terraform) | In Progress |
+| **CKA** | Core Architecture, Scheduling, Networking, Troubleshooting, Etcd | [Explore CKA](./cka) | 🟡 In Progress |
+| **EX280** | Red Hat OpenShift, RBAC, Operators, Route/Ingress, Security Contexts | [Explore EX280](./ex280) | 🟡 In Progress |
+| **KCNA** | Cloud-Native Fundamentals, GitOps, CNCF Ecosystem, Observability | [Explore KCNA](./kcna) | 🟢 Complete |
+| **Terraform Associate** | IaC, State Management, Modules, Provisioners, Workflows | [Explore Terraform](./terraform) | 🟡 In Progress |
 
 
 ### EX280 — OpenShift Administration
