@@ -19,7 +19,7 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 *Goal: Master the CLI and web console, and run basic cluster health checks.*
 
-**Theory** ([`01-manage-ocp.md`](01-manage-ocp.md)) - CLI & console · projects · images (tags/digests) · querying & filtering · import/export/edit · cluster status · logs & troubleshooting · monitoring · cluster updates
+**Theory** ([`01-manage-ocp.md`](objectives/01-manage-ocp.md)) - CLI & console · projects · images (tags/digests) · querying & filtering · import/export/edit · cluster status · logs & troubleshooting · monitoring · cluster updates
 
 <details><summary>📋 Official objective coverage (Red Hat)</summary>
 
@@ -52,7 +52,7 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 *Goal: Move from ad-hoc commands to Infrastructure as Code.*
 
-**Theory** ([`02-resource-manifests.md`](02-resource-manifests.md)) - YAML anatomy · updating deployments · ConfigMaps · Secrets · Kustomize basics · Kustomize overlays
+**Theory** ([`02-resource-manifests.md`](objectives/02-resource-manifests.md)) - YAML anatomy · updating deployments · ConfigMaps · Secrets · Kustomize basics · Kustomize overlays
 
 <details><summary>📋 Official objective coverage (Red Hat)</summary>
  
