@@ -19,6 +19,27 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 *Goal: Master the CLI and web console, and run basic cluster health checks.*
 
+**Theory** ([`01-manage-ocp.md`](01-manage-ocp.md)) - CLI & console · projects · images (tags/digests) · querying & filtering · import/export/edit · cluster status · logs & troubleshooting · monitoring · cluster updates
+
+<details><summary>📋 Official objective coverage (Red Hat)</summary>
+
+- [ ] Use the web console to manage and configure an OpenShift cluster
+- [ ] Use the command-line interface to manage and configure an OpenShift cluster
+- [ ] Create and delete projects
+- [ ] Locate and examine container images
+- [ ] Identify images using tags and digests
+- [ ] Query, format, and filter attributes of Kubernetes resources
+- [ ] Import, export, and configure Kubernetes resources
+- [ ] Examine resources and cluster status
+- [ ] Monitor cluster events and alerts
+- [ ] View logs
+- [ ] Assess the health of an OpenShift cluster
+- [ ] Troubleshoot common container, pod, and cluster events and alerts
+- [ ] Use product documentation
+- [ ] Be prepared to perform all tasks of a Red Hat Certified Technologist in OpenShift
+
+</details>
+
 - [ ] **Lab 1.1:** [Project lifecycle](01-manage-ocp.md#lab-11--project-lifecycle-10-min)
 - [ ] **Lab 1.2:** [Querying & filtering resources](01-manage-ocp.md#lab-12--querying--filtering-15-min)
 - [ ] **Lab 1.3:** [Imperative → declarative](01-manage-ocp.md#lab-13--imperative--declarative-15-min)
