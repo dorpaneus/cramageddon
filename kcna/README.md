@@ -1,4 +1,4 @@
-# KCNA 14-Day Study Curriculum
+# KCNA Study Curriculum
 
 A structured, concept-first study plan for the **Kubernetes and Cloud Native Associate (KCNA)** certification, reinforced with hands-on labs and active-recall drills, and calibrated to the official CNCF / Linux Foundation domain weights.
 
