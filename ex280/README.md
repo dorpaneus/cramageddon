@@ -2,7 +2,7 @@
 
 This repository is a consolidated study resource for the **EX280** exam, merging the official objectives with hands-on labs and OCP 4.18 documentation. Each objective file contains `.yaml` manifests, `oc` command cheatsheets, and step-by-step labs (each lab has a hidden worked solution).
 
-> **🎯 Target version: OpenShift Container Platform 4.18 (latest, released Dec 2025).**
+> **🎯 Target version: OpenShift Container Platform 4.18 (GA late 2025).**
 > Merged & sorted from:
 > - The [official Red Hat EX280 objectives page](https://www.redhat.com/en/services/training/red-hat-certified-openshift-administrator-exam)
 > - The OCP 4.18 product documentation at <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18>
