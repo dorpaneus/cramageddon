@@ -9,7 +9,9 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 > - Community labs (`anishrana2001/Openshift`, `mgonzalezo/RedHat_ex280` - both authored for 4.14; every command here has been rewritten for **4.18**).
 
 > **Red Hat rule:** all configurations must **persist after reboot** without intervention. Use `oc`/YAML - never edit files on nodes by hand.
-> **Heads up**: These are my own personal study notes — not official, not affiliated with Red Hat, and no guarantees they're complete or error-free. Cross-check with the official docs and use at your own risk. 🙂
+
+
+> **Heads up**: These are my own personal study notes - not official, not affiliated with Red Hat, and no guarantees they're complete or error-free. Cross-check with the official docs and take it with a small pinch of salt. 🙂
 
 ---
 
