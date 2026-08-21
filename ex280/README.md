@@ -1,4 +1,4 @@
-# EX280 — Red Hat Certified System Administrator in OpenShift (~30-Day Study Plan)
+# EX280 - Red Hat Certified System Administrator in OpenShift (Study Plan)
 
 This repository is a consolidated study resource for the **EX280** exam, merging the official objectives with hands-on labs and OCP 4.18 documentation. Each objective file contains `.yaml` manifests, `oc` command cheatsheets, and step-by-step labs (each lab has a hidden worked solution).
 
