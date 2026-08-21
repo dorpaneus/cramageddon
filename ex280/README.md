@@ -55,12 +55,14 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 **Theory** ([`02-resource-manifests.md`](02-resource-manifests.md)) - YAML anatomy · updating deployments · ConfigMaps · Secrets · Kustomize basics · Kustomize overlays
 
 <details><summary>📋 Official objective coverage (Red Hat)</summary>
- Deploy applications from YAML resource manifests
- Update application deployments
- Deploy applications using Kustomize
- Work with Kustomize overlays
- Create and use secrets
- Create and use configuration maps
+ 
+- [ ] Deploy applications from YAML resource manifests
+- [ ] Update application deployments
+- [ ] Deploy applications using Kustomize
+- [ ] Work with Kustomize overlays
+- [ ] Create and use secrets
+- [ ] Create and use configuration maps
+
 </details>
 
 - [ ] **Lab 2.1:** [From scratch to running (YAML manifests)](02-resource-manifests.md#lab-21--from-scratch-to-running-20-min)
