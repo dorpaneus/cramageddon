@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: OpenShift operators](./08-openshift-operators.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Storage supplement ➡️](./10-storage-supplement.md)
+
+</div>
+
 # Objective 9 — Configure Application Security
 
 > **Exam study points:**
@@ -1151,3 +1157,11 @@ Swap `4.18` for your exam's version. If a page 404s, open the guide's `index` pa
 
 - Authentication and authorization (service accounts, **Managing security context constraints**, **Understanding and managing pod security admission**): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/authentication_and_authorization/index>
 - Nodes (Jobs, CronJobs, pods): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/nodes/index>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: OpenShift operators](./08-openshift-operators.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Storage supplement ➡️](./10-storage-supplement.md)
+
+</div>

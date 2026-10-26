@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: Network security](./05-network-security.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Developer self-service ➡️](./07-developer-self-service.md)
+
+</div>
+
 # Objective 6 — Expose non-HTTP/SNI Applications
 
 > **Exam study points:**
@@ -51,7 +57,7 @@ Considerations:
 
 - Make sure the **firewall on the node** allows traffic to the chosen NodePort.
 - On CRC, the relevant node IP is `crc ip` (one node).
-- Pod Security Admission still applies; nothing magic about NodePort.
+- The Service type changes only how traffic **reaches** the pod; it doesn't change what the pod may do. SCCs (and NetworkPolicies) apply exactly as for a ClusterIP Service.
 
 ## §3 — LoadBalancer (cloud)
 
@@ -224,8 +230,8 @@ oc get svc mysql
 
 ```bash
 oc get pod -l deployment=mysql --show-labels | head
-oc get endpoints mysql
-# mysql   10.x.x.x:3306    ← must be populated
+oc get endpointslices -l kubernetes.io/service-name=mysql
+# mysql-xxxxx   IPv4   3306   10.x.x.x    ← must be populated
 ```
 
 **Imperative alternative:**
@@ -265,7 +271,7 @@ mysql -h "$NODE_IP" -P 30336 -uapp -papp appdb
 
 | Cause | Check |
 |-------|-------|
-| Empty endpoints (selector mismatch) | `oc get endpoints mysql` should show a pod IP |
+| Empty endpoints (selector mismatch) | `oc get endpointslices -l kubernetes.io/service-name=mysql` should show a pod IP |
 | Pod not ready | `oc get pods -l deployment=mysql` |
 | Cloud firewall blocks 30336 | Managed clusters (EKS/AKS/GKE) often block NodePort range in security groups — this lab may only work on CRC/bare-metal |
 | Wrong node IP | On multi-node clusters, any node's IP works (kube-proxy forwards), but the IP must be reachable from your workstation |
@@ -309,7 +315,7 @@ mysql -h "$NODE_IP" -P 30336 -uapp -papp appdb -e "
 ```bash
 oc get svc mysql -o jsonpath='type={.spec.type}{"\t"}nodePort={.spec.ports[0].nodePort}{"\n"}'
 # type=NodePort   nodePort=30336
-oc get endpoints mysql        # populated
+oc get endpointslices -l kubernetes.io/service-name=mysql   # populated
 # and the mysql client SELECT returned the row
 ```
 
@@ -658,12 +664,19 @@ oc patch network.config/cluster --type=json \
 2. **NodePorts default to 30000–32767.** Outside that range needs cluster config.
 3. **Cloud LB Services can take 1-2 minutes** to provision; don't panic at the first `<pending>`.
 4. **ExternalIP requires admin config** of `Network.config/cluster` — won't work without it.
-5. **MySQL/Postgres/Redis containers usually need an SCC** (anyuid or non-default fsGroup). See `09-application-security.md`.
+5. **Pick database images built for OpenShift.** Red Hat's `rhel9/mysql-80`, `rhel9/postgresql-*` and the `quay.io/sclorg/*` images run fine under the default `restricted-v2` SCC. Upstream Docker Hub images often expect root or a fixed UID and crash — see `09-application-security.md`.
 
 ## 🔗 Docs to bookmark
 
-- Services: https://docs.openshift.com/container-platform/4.18/networking/configuring_ingress_cluster_traffic/overview-traffic.html
-- NodePort: https://docs.openshift.com/container-platform/4.18/networking/configuring_ingress_cluster_traffic/configuring-ingress-cluster-traffic-nodeport.html
-- LoadBalancer: https://docs.openshift.com/container-platform/4.18/networking/configuring_ingress_cluster_traffic/configuring-ingress-cluster-traffic-load-balancer.html
-- ExternalIP: https://docs.openshift.com/container-platform/4.18/networking/configuring_ingress_cluster_traffic/configuring-externalip.html
-- MetalLB: https://docs.openshift.com/container-platform/4.18/networking/metallb/about-metallb.html
+Since 4.18 these pages live in the *Ingress and load balancing* guide. Swap `4.18` for your exam's version; if a page 404s, open the guide's `index` page.
+
+- Configuring ingress cluster traffic (overview, NodePort, LoadBalancer, ExternalIP — all in one chapter): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/ingress_and_load_balancing/configuring-ingress-cluster-traffic>
+- Load balancing with MetalLB: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/ingress_and_load_balancing/load-balancing-with-metallb>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Network security](./05-network-security.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Developer self-service ➡️](./07-developer-self-service.md)
+
+</div>

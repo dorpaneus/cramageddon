@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: Expose non-HTTP/SNI applications](./06-expose-non-http-sni.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: OpenShift operators ➡️](./08-openshift-operators.md)
+
+</div>
+
 # Objective 7 — Enable Developer Self-Service
 
 > **Exam study points:**
@@ -155,7 +161,7 @@ oc adm create-bootstrap-project-template -o yaml > project-template.yaml
 
 ### Step 2 — Edit it to add objects
 
-Add (under `objects:`) any standard resources. Use `${PROJECT_NAME}` for the namespace.
+The generated file is a `Template` (`apiVersion: template.openshift.io/v1`, `metadata.name: project-request`) whose `objects:` list already holds a **Project** and an **admin RoleBinding** for the requesting user. **Keep both** — without the RoleBinding, users can't administer the projects they create. Add your own objects to the same list; use `${PROJECT_NAME}` for the namespace.
 
 ```yaml
 objects:
@@ -168,6 +174,21 @@ objects:
         openshift.io/description: ${PROJECT_DESCRIPTION}
         openshift.io/display-name: ${PROJECT_DISPLAYNAME}
         openshift.io/requester: ${PROJECT_REQUESTING_USER}
+
+  # 1b. admin RoleBinding for the requester (already present — keep it)
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: admin
+      namespace: ${PROJECT_NAME}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: admin
+    subjects:
+      - apiGroup: rbac.authorization.k8s.io
+        kind: User
+        name: ${PROJECT_ADMIN_USER}
 
   # 2. NEW: a default ResourceQuota
   - apiVersion: v1
@@ -218,7 +239,10 @@ objects:
         - from:
             - namespaceSelector:
                 matchLabels:
-                  network.openshift.io/policy-group: ingress
+                  policy-group.network.openshift.io/ingress: ""
+            - namespaceSelector:          # needed when the router uses HostNetwork (CRC, SNO, bare metal)
+                matchLabels:
+                  policy-group.network.openshift.io/host-network: ""
 
 parameters:
   - name: PROJECT_NAME
@@ -267,7 +291,8 @@ oc rollout status -n openshift-apiserver deployment.apps/apiserver
 oc login -u alice -p alicepw
 oc new-project mytest
 oc get quota,limitrange,networkpolicy -n mytest
-# All five objects should be present.
+# Expect the quota, the limit range and both network policies
+# (plus the admin RoleBinding: oc get rolebinding admin -n mytest).
 ```
 
 ## §6 — `oc adm` helpers
@@ -729,7 +754,10 @@ objects:
     - from:
       - namespaceSelector:
           matchLabels:
-            network.openshift.io/policy-group: ingress
+            policy-group.network.openshift.io/ingress: ""
+      - namespaceSelector:            # needed when the router uses HostNetwork (CRC, SNO, bare metal)
+          matchLabels:
+            policy-group.network.openshift.io/host-network: ""
 parameters:
 - name: PROJECT_NAME
 - name: PROJECT_DISPLAYNAME
@@ -738,7 +766,7 @@ parameters:
 - name: PROJECT_REQUESTING_USER
 ```
 
-**Order matters for NetworkPolicies:** `deny-all-ingress` establishes the baseline (nothing gets in), then `allow-from-router` re-opens ingress from the OpenShift router only. Together: pods are reachable via Routes/Services through the router, but not directly from other namespaces.
+**How the two policies combine:** NetworkPolicies are additive and their order doesn't matter. `deny-all-ingress` selects every pod, which switches the namespace to default-deny for ingress; `allow-from-router` then allows one source (the router) back in. The result: pods are reachable through Routes, but not directly from other namespaces. (Pods in the same namespace can't reach each other either — add an `allow-same-namespace` policy if apps need that.)
 
 </details>
 
@@ -849,9 +877,12 @@ ROUTE=$(oc get route web -n demo -o jsonpath='{.spec.host}')
 curl -I http://$ROUTE
 # HTTP/1.1 200 OK
 
-# Prove the deny-all baseline blocks direct cross-namespace access:
+# Prove the deny-all baseline blocks direct cross-namespace access.
+# alice can't run pods in `default`, so give her a second project to probe from
+# (it gets the same template objects — that doesn't matter, they only restrict ingress):
+oc new-project demo-probe
 oc run probe --image=registry.access.redhat.com/ubi9/ubi-minimal:latest \
-  -n default --rm -it --restart=Never -- \
+  -n demo-probe --rm -it --restart=Never -- \
   curl -m 5 http://web.demo.svc.cluster.local:8080
 # Times out — direct pod-to-pod from another namespace is blocked by deny-all-ingress
 ```
@@ -869,7 +900,7 @@ oc run probe --image=registry.access.redhat.com/ubi9/ubi-minimal:latest \
 oc patch project.config.openshift.io/cluster --type=json \
   -p='[{"op":"remove","path":"/spec/projectRequestTemplate"}]'
 oc delete template project-request -n openshift-config
-oc delete project demo
+oc delete project demo demo-probe
 oc rollout status -n openshift-apiserver deployment/apiserver --timeout=5m
 ```
 
@@ -1018,7 +1049,16 @@ oc delete project lab74
 
 ## 🔗 Docs to bookmark
 
-- Quotas: https://docs.openshift.com/container-platform/4.18/applications/quotas/quotas-setting-per-project.html
-- ClusterResourceQuota: https://docs.openshift.com/container-platform/4.18/applications/quotas/setting-quotas-across-multiple-projects.html
-- LimitRanges: https://docs.openshift.com/container-platform/4.18/nodes/clusters/setting-limit-ranges.html
-- Project templates: https://docs.openshift.com/container-platform/4.18/applications/projects/configuring-project-creation.html
+Swap `4.18` for your exam's version; if a page 404s, open the guide's `index` page.
+
+- Quotas — per project **and** across multiple projects (`ClusterResourceQuota`): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/building_applications/quotas>
+- Limit ranges (*Nodes* → "Working with clusters" → "Setting limit ranges"): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/nodes/working-with-clusters>
+- Project templates & self-provisioning (*Building applications* → "Projects" → "Configuring project creation"): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/building_applications/projects>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Expose non-HTTP/SNI applications](./06-expose-non-http-sni.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: OpenShift operators ➡️](./08-openshift-operators.md)
+
+</div>

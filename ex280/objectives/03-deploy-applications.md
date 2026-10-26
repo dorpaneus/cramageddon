@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: Work with resource manifests](./02-resource-manifests.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Authentication & authorization ➡️](./04-auth-and-authorization.md)
+
+</div>
+
 # Objective 3 - Deploy Applications
 
 > **Exam study points:**
@@ -417,12 +423,14 @@ oc get bc ruby-hello -o jsonpath='{.spec.strategy.type}{"\n"}'
 oc get is python -n openshift -o jsonpath='{range .spec.tags[*]}{.name}{"\n"}{end}'
 
 oc new-app --image-stream=openshift/python:3.11-ubi9 \
-  --code=https://github.com/sclorg/django-ex.git --name=django
+  --code=https://github.com/sclorg/django-ex.git#4.2.x --name=django
 
 oc logs -f bc/django
 ```
 
-Use this form when auto-detection picks the wrong builder or version. The shorthand is `oc new-app python:3.11-ubi9~https://github.com/sclorg/django-ex.git`.
+`#4.2.x` selects a Git branch: the repo's default branch now only holds a README pointing to per-version branches (`4.2.x` = Django 4.2 LTS, which supports Python 3.11), so building it would fail.
+
+Use this form when auto-detection picks the wrong builder or version. The shorthand is `oc new-app python:3.11-ubi9~https://github.com/sclorg/django-ex.git#4.2.x`.
 
 **Wrap-up for all five:**
 
@@ -741,4 +749,12 @@ Swap `4.18` for your exam's version. If a page 404s, open the guide's `index` pa
 - Building applications (projects, `new-app`, Deployments, quotas): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/building_applications/index>
 - Working with Helm charts: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/building_applications/working-with-helm-charts>
 - Images (image streams, templates): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/images/index>
-- Routes and services: from the version landing page <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18>, open the networking guides (newer releases split them, e.g. *Ingress and load balancing*)
+- Routes (*Ingress and load balancing* guide — since 4.18 networking is split into several guides): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/ingress_and_load_balancing/routes>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Work with resource manifests](./02-resource-manifests.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Authentication & authorization ➡️](./04-auth-and-authorization.md)
+
+</div>

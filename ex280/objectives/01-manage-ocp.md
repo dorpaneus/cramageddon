@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: Home](../README.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Work with resource manifests ➡️](./02-resource-manifests.md)
+
+</div>
+
 # Objective 1 - Manage OpenShift Container Platform
 
 > **Exam study points (verbatim from Red Hat):**
@@ -264,7 +270,7 @@ oc adm must-gather --dest-dir=./must-gather-$(date +%s)
 Pod stuck Pending          → oc describe pod → look at Events → fix scheduling (resources, taints, nodeSelector)
 Pod CrashLoopBackOff       → oc logs --previous → fix command/image/env
 ImagePullBackOff           → oc describe → wrong image/tag/pull-secret? oc get events for auth errors
-Service has no endpoints   → oc get endpoints svc/x → labels mismatch between Service.selector and Pod.labels
+Service has no endpoints   → oc get endpointslices -l kubernetes.io/service-name=x → Service.selector ≠ Pod labels, or pods not Ready
 Route 503 / 404            → oc get route → wrong service / wrong port / TLS termination wrong
 RBAC error                 → oc auth can-i <verb> <resource> -n <ns> --as=<user>
 ```
@@ -1468,3 +1474,11 @@ oc get mcp -o custom-columns=NAME:.metadata.name,PAUSED:.spec.paused
 - Image streams: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/images/managing-image-streams>
 - Updates: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/updating_clusters/index>
 - Troubleshooting: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/support/troubleshooting>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Home](../README.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Work with resource manifests ➡️](./02-resource-manifests.md)
+
+</div>

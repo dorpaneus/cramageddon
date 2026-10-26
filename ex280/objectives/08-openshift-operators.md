@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: Developer self-service](./07-developer-self-service.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Application security ➡️](./09-application-security.md)
+
+</div>
+
 # Objective 8 - Manage OpenShift Operators
 
 > **Exam study points:**
@@ -54,7 +60,7 @@ Two kinds of `OperatorGroup`:
 
 The fast path on exam day if available:
 
-1. Web console → **Operators → OperatorHub**.
+1. Web console → **Operators → OperatorHub** (4.18). In newer consoles (4.20+) the same catalog is **Ecosystem → Software Catalog**, and installed operators are under the **Ecosystem** menu too.
 2. Search the operator (e.g. *Web Terminal*).
 3. Click **Install**.
 4. Pick:
@@ -140,32 +146,30 @@ This is also how you control **operator upgrades** - same flow, but for the next
 
 ## §5 - Uninstall / delete an operator
 
-Two stages:
-
-### Stage A - Uninstall (stop OLM from re-installing it)
+The order matters — delete in this sequence:
 
 ```bash
-# 1. Delete the Subscription
-oc delete subscription web-terminal -n openshift-operators
+# 1. Custom resources first, while the operator still runs (their finalizers need it)
+oc get csv <csv> -n openshift-operators -o jsonpath='{.spec.customresourcedefinitions.owned[*].name}'
+oc delete <crd-plural.group> --all --all-namespaces --wait
 
-# 2. Delete the CSV (this stops & removes the operator's Deployment)
-oc get csv -n openshift-operators | grep web-terminal
-oc delete csv web-terminal.v1.x.y -n openshift-operators
-```
+# 2. Subscription (stops OLM from reinstalling/updating) and CSV (removes the operator Deployment)
+CSV=$(oc get sub <sub> -n openshift-operators -o jsonpath='{.status.installedCSV}')
+oc delete subscription <sub> -n openshift-operators
+oc delete csv $CSV -n openshift-operators
 
-### Stage B - Clean up CRs, CRDs, OperatorGroup, namespace
+# 3. CRDs (cluster-wide; OLM never deletes them)
+oc delete crd <name>
 
-```bash
-# Delete any Custom Resources you created (e.g. WebTerminal instances)
-oc get crd | grep web-terminal
-oc delete crd <name>                  # ⚠ cluster-wide; will cascade-delete CRs
-
-# If you used a dedicated namespace:
+# 4. Anything the operator created itself (webhooks, cluster roles…) — check its docs
+# 5. If you used a dedicated namespace:
 oc delete operatorgroup -n my-op --all
 oc delete namespace my-op
 ```
 
-> ⚠️ **The web console "Uninstall" button only does Stage A** - CRDs and CRs stick around. On the exam, *fully* delete unless the prompt says otherwise.
+> ⚠️ **The console's *Uninstall Operator* action covers steps 2 (and, depending on the console version, optionally 1)** — CRDs and anything the operator created itself stick around. On the exam, *fully* delete unless the prompt says otherwise. Lab 8.3 walks through a complete removal.
+
+> ⚠️ **Dependencies:** OLM installs required operators automatically (e.g. Web Terminal pulls in the DevWorkspace Operator) but never removes them. Uninstall the dependent operator first, then the dependency — if nothing else needs it.
 
 ## §6 - Updating an operator
 
@@ -247,7 +251,7 @@ The console install path is the easiest, but you must understand the three choic
 
 ---
 
-#### Step 1 — Console → OperatorHub → search "Web Terminal"
+#### Step 1 — Console → OperatorHub (Software Catalog) → search "Web Terminal"
 
 <details>
 <summary>💡 Solution</summary>
@@ -258,11 +262,11 @@ The console install path is the easiest, but you must understand the three choic
    # https://console-openshift-console.apps.<cluster-domain>
    ```
 2. Log in as a cluster-admin.
-3. Left nav → **Operators → OperatorHub**.
+3. Left nav → **Operators → OperatorHub** (4.18) or **Ecosystem → Software Catalog** (4.20+).
 4. In the "Filter by keyword" box, type `Web Terminal`.
 5. Click the **Web Terminal** tile (publisher: Red Hat).
 
-**Why Web Terminal:** it's small, installs fast, has no required CR to become useful, and cleans up easily — ideal for a lab. (If Web Terminal isn't in your catalog, any small Red Hat operator works: "DevWorkspace Operator", "Cluster Observability Operator", etc.)
+**Why Web Terminal:** it's small, installs fast and needs no CR to become useful — ideal for a lab. It also shows a **dependency**: OLM automatically installs the **DevWorkspace Operator** alongside it. (If Web Terminal isn't in your catalog, any small Red Hat operator works, e.g. "Cluster Observability Operator".)
 
 </details>
 
@@ -335,18 +339,22 @@ oc wait --for=jsonpath='{.status.phase}'=Succeeded \
 ```bash
 # The CSV
 oc get csv -n openshift-operators
-# NAME                  DISPLAY        VERSION   REPLACES              PHASE
-# web-terminal.v1.x.x   Web Terminal   1.x.x     web-terminal.v1.w.w   Succeeded
+# NAME                           DISPLAY                 VERSION   PHASE
+# devworkspace-operator.v0.x.x   DevWorkspace Operator   0.x.x     Succeeded   ← pulled in as a dependency
+# web-terminal.v1.x.x            Web Terminal            1.x.x     Succeeded
 
-# The operator's running pods
+# The operators' running pods
 oc get pods -n openshift-operators
-# NAME                                READY   STATUS    RESTARTS   AGE
-# web-terminal-controller-xxxxx       1/1     Running   0          2m
+# NAME                                   READY   STATUS    RESTARTS   AGE
+# devworkspace-controller-manager-xxxxx  2/2     Running   0          2m
+# devworkspace-webhook-server-xxxxx      2/2     Running   0          2m
+# web-terminal-controller-xxxxx          1/1     Running   0          2m
 
-# The Subscription (created automatically by the console)
+# The Subscriptions (the console created one; OLM created the dependency's)
 oc get subscription -n openshift-operators
-# NAME           PACKAGE        SOURCE             CHANNEL
-# web-terminal   web-terminal   redhat-operators   fast
+# NAME                    PACKAGE                 SOURCE             CHANNEL
+# devworkspace-operator   devworkspace-operator   redhat-operators   fast
+# web-terminal            web-terminal            redhat-operators   fast
 
 # The InstallPlan (the approved unit of work that installed the CSV)
 oc get installplan -n openshift-operators
@@ -376,7 +384,8 @@ This is the exam-critical path: install an operator with nothing but YAML. You'l
 
 **Prerequisites:**
 - Cluster-admin.
-- `redhat-operators` (or `community-operators`) catalog source available.
+- `redhat-operators` catalog source available.
+- **If you did Lab 8.1, the DevWorkspace Operator is already installed** (as Web Terminal's dependency). Remove Web Terminal and DevWorkspace first (Lab 8.3), or pick another small operator for this lab.
 
 ---
 
@@ -391,7 +400,7 @@ oc get packagemanifests -n openshift-marketplace | head
 
 # Find the one you want
 oc get packagemanifests -n openshift-marketplace | grep -i devworkspace
-# devworkspace-operator   Community Operators   2d
+# devworkspace-operator   Red Hat Operators   2d
 
 # Inspect it for channels and the default channel
 oc get packagemanifest devworkspace-operator -n openshift-marketplace \
@@ -402,7 +411,7 @@ oc get packagemanifest devworkspace-operator -n openshift-marketplace \
 # Which catalog source does it come from?
 oc get packagemanifest devworkspace-operator -n openshift-marketplace \
   -o jsonpath='{.status.catalogSource}{"\t"}{.status.catalogSourceNamespace}{"\n"}'
-# community-operators   openshift-marketplace
+# redhat-operators   openshift-marketplace
 ```
 
 **The four facts you need before writing a Subscription:**
@@ -444,7 +453,7 @@ metadata:
 spec:
   channel: fast
   name: devworkspace-operator
-  source: community-operators
+  source: redhat-operators
   sourceNamespace: openshift-marketplace
   installPlanApproval: Automatic
 ```
@@ -570,14 +579,25 @@ oc api-resources | grep -i devworkspace
 
 ### Lab 8.3 — Full uninstall + cleanup (15 min)
 
-Uninstalling an operator is a multi-step purge because OLM deliberately leaves your data (CRs and CRDs) behind by default. The exam may ask for a *complete* removal.
+Uninstalling an operator is a multi-step purge because OLM deliberately leaves your data (CRs and CRDs) behind. The exam may ask for a *complete* removal. This lab removes the DevWorkspace Operator from Lab 8.2. It's a good example because it also leaves webhooks behind, and its docs spell out the full cleanup.
 
 **Prerequisites:**
-- An operator installed from Lab 8.1 or 8.2.
+- The DevWorkspace Operator installed (Lab 8.2).
+- **If you also did Lab 8.1:** Web Terminal **depends on** DevWorkspace — installing Web Terminal installed DevWorkspace too. Uninstall Web Terminal first (its Subscription and CSV, same commands as below with `web-terminal`), then continue here.
+
+**The order, and why:**
+
+```
+1. CRs        while the controller still runs, so their finalizers can complete
+2. Sub + CSV  stop OLM from reinstalling, remove the operator Deployment
+3. CRDs       cluster-scoped; OLM never deletes them
+4. Leftovers  anything the operator created itself (here: webhooks)
+5. OperatorGroup + Namespace   only if you made a dedicated one
+```
 
 ---
 
-#### Step 1 — Pick an operator and record its details
+#### Step 1 — Record the operator's details
 
 <details>
 <summary>💡 Solution</summary>
@@ -590,120 +610,106 @@ SUB=devworkspace-operator      # the Subscription name
 CSV=$(oc get sub $SUB -n $NS -o jsonpath='{.status.installedCSV}')
 echo "CSV is: $CSV"
 # devworkspace-operator.v0.x.x
+
+# Which CRDs does it own?
+oc get csv $CSV -n $NS -o jsonpath='{range .spec.customresourcedefinitions.owned[*]}{.name}{"\n"}{end}'
 ```
 
-**Why capture the CSV name first:** once you delete the Subscription, the easy link from Sub → CSV is gone, and you'd have to hunt for the CSV by hand. Grab it up front.
+**Why first:** once the Subscription is gone, the easy link from Subscription → CSV is gone too.
 
 </details>
 
 ---
 
-#### Step 2 — Delete the Subscription
+#### Step 2 — Delete the custom resources (while the operator still runs)
+
+<details>
+<summary>💡 Solution</summary>
+
+```bash
+oc delete devworkspaces.workspace.devfile.io --all-namespaces --all --wait
+oc delete devworkspaceroutings.controller.devfile.io --all-namespaces --all --wait
+```
+
+**General pattern for any operator** — delete every instance of every CRD it owns:
+
+```bash
+for crd in $(oc get csv $CSV -n $NS -o jsonpath='{.spec.customresourcedefinitions.owned[*].name}'); do
+  oc delete "$crd" --all --all-namespaces --wait
+done
+```
+
+**Why now:** many CRs carry finalizers that only the operator can complete. Delete them after the operator is gone and they hang in `Terminating` (fix: `oc patch <kind> <name> -n <ns> --type=merge -p '{"metadata":{"finalizers":[]}}'`).
+
+</details>
+
+---
+
+#### Step 3 — Delete the Subscription and the CSV
 
 <details>
 <summary>💡 Solution</summary>
 
 ```bash
 oc delete subscription $SUB -n $NS
-# subscription.operators.coreos.com "devworkspace-operator" deleted
-```
-
-**Important:** deleting *only* the Subscription does NOT remove the operator. The CSV (and its running pods) stays behind. Verify:
-
-```bash
-oc get csv $CSV -n $NS
-# Still present — PHASE Succeeded
-
-oc get pods -n $NS
-# operator pod STILL running
-```
-
-This surprises people. The Subscription is just the "keep this updated" intent; the CSV is the actual install.
-
-</details>
-
----
-
-#### Step 3 — Delete the CSV
-
-<details>
-<summary>💡 Solution</summary>
-
-```bash
 oc delete csv $CSV -n $NS
-# clusterserviceversion.operators.coreos.com "devworkspace-operator.v0.x.x" deleted
+
+oc get pods -n $NS | grep -i devworkspace-controller     # operator pod gone
 ```
 
-Now the operator's Deployment, ServiceAccounts, and RBAC (everything the CSV owned) are removed:
+**Deleting only the Subscription does NOT remove the operator** — it just stops OLM from updating it; the CSV and its pods keep running. Deleting the CSV removes what OLM deployed (the operator Deployment, its ServiceAccounts and RBAC).
 
-```bash
-oc get pods -n $NS
-# operator pod gone
-
-oc get deployment -n $NS | grep -i devworkspace
-# (no output)
-```
-
-**One-liner combining steps 2–3:**
-
-```bash
-CSV=$(oc get sub $SUB -n $NS -o jsonpath='{.status.installedCSV}')
-oc delete sub $SUB -n $NS
-oc delete csv $CSV -n $NS
-```
+**Console equivalent:** Installed Operators (4.18) → the operator → *Actions* → *Uninstall Operator*. Depending on the console version the dialog can also delete the operator's instances (CRs), but it never deletes CRDs — Step 4 is always manual.
 
 </details>
 
 ---
 
-#### Step 4 — Delete any CRs you created against the operator
+#### Step 4 — Delete the CRDs
 
 <details>
 <summary>💡 Solution</summary>
 
-If you created custom resources (e.g. a `DevWorkspace`, an `ArgoCD`, a `Pipeline`), delete them. **Do this BEFORE deleting the CRDs** — once the CRD is gone, the CRs become un-deletable orphans (their finalizers can't run because the controller is gone).
-
 ```bash
-# Find CRs of each owned type, in all namespaces
-oc get devworkspaces.workspace.devfile.io -A
-oc delete devworkspaces.workspace.devfile.io --all -A
+oc get crd -o name | grep 'devfile.io'
+oc get crd -o name | grep 'devfile.io' | xargs oc delete
 
-# General pattern for any operator:
-for crd in $(oc get crd -o name | grep devfile.io); do
-  kind=$(oc get $crd -o jsonpath='{.spec.names.plural}.{.spec.group}')
-  echo "Deleting all $kind ..."
-  oc delete $kind --all -A 2>/dev/null
-done
+oc get crd | grep devfile.io       # (no output)
 ```
 
-**Gotcha — stuck CRs:** if you already deleted the operator (Step 3) and a CR has a finalizer, it will hang in `Terminating`. Remove the finalizer by hand:
-
-```bash
-oc patch devworkspace <name> -n <ns> --type=merge -p '{"metadata":{"finalizers":[]}}'
-```
+**Caution:** CRDs are cluster-scoped, and deleting one deletes **all** CRs of that type in every namespace. Make sure nothing else relies on them — for example, OpenShift Dev Spaces also uses the DevWorkspace CRDs.
 
 </details>
 
 ---
 
-#### Step 5 — Delete the related CRDs (full purge)
+#### Step 5 — Remove what the operator created itself (webhooks)
 
 <details>
 <summary>💡 Solution</summary>
 
-```bash
-# List them first
-oc get crd | grep -E 'devfile.io|devworkspace'
+Deleting the CSV removes only what OLM deployed. The DevWorkspace operator also created a webhook server and cluster-wide webhook registrations at runtime, and those stay behind. Remove the **webhook registrations first** — if the server goes first, the still-registered webhooks block `oc exec` cluster-wide:
 
-# Delete them
-oc get crd -o name | grep -E 'devfile.io|devworkspace' | xargs oc delete
-# customresourcedefinition.apiextensions.k8s.io "devworkspaces.workspace.devfile.io" deleted
-# ...
+```bash
+oc delete mutatingwebhookconfigurations controller.devfile.io
+oc delete validatingwebhookconfigurations controller.devfile.io
+oc delete deployment/devworkspace-webhook-server -n openshift-operators
+
+# Remaining services, service account and RBAC objects
+oc delete all --selector app.kubernetes.io/part-of=devworkspace-operator,app.kubernetes.io/name=devworkspace-webhook-server -n openshift-operators
+oc delete serviceaccounts devworkspace-webhook-server -n openshift-operators
+oc delete clusterrole devworkspace-webhook-server
+oc delete clusterrolebinding devworkspace-webhook-server
 ```
 
-**Caution:** CRDs are cluster-scoped and deleting one cascades to **all** CRs of that type in every namespace. Make sure no other team relies on them.
+**For other operators**, look for what they leave behind with label selectors and webhook listings:
 
-**If you used Case B (dedicated namespace + OperatorGroup) in Lab 8.2, also remove those:**
+```bash
+oc get mutatingwebhookconfigurations,validatingwebhookconfigurations | grep -i <operator>
+oc get all,sa,clusterrole,clusterrolebinding -A | grep -i <operator>
+```
+
+**If you used a dedicated namespace + OperatorGroup** (Lab 8.2, Case B), remove those too:
 
 ```bash
 oc delete operatorgroup my-operator-og -n my-operator-ns
@@ -714,36 +720,18 @@ oc delete namespace my-operator-ns
 
 ---
 
-#### Step 6 — Confirm the operator pod is gone
+#### Step 6 — Confirm everything is gone
 
 <details>
 <summary>💡 Solution</summary>
 
 ```bash
-oc get pods -n openshift-operators | grep -i devworkspace
-# (no output — success)
-
-oc get csv -n openshift-operators | grep -i devworkspace
-# (no output)
-
-oc get crd | grep -i devworkspace
-# (no output — full purge confirmed)
-
-oc api-resources | grep -i devworkspace
-# (no output)
+oc get sub,csv -n openshift-operators | grep -i devworkspace                       # (no output)
+oc get pods -n openshift-operators | grep -i devworkspace                          # (no output)
+oc get crd | grep devfile.io                                                       # (no output)
+oc get mutatingwebhookconfigurations,validatingwebhookconfigurations | grep devfile # (no output)
+oc api-resources | grep -i devworkspace                                            # (no output)
 ```
-
-**The complete uninstall order, memorized:**
-
-```
-1. CRs        (delete instances first, while the controller still runs)
-2. Subscription
-3. CSV
-4. CRDs       (cluster-scoped; cascades to any remaining CRs)
-5. OperatorGroup + Namespace  (only if you made a dedicated one)
-```
-
-The reason CRs come first: their finalizers need the controller alive to clean up. Everything else (Sub, CSV, CRD) is about removing the operator machinery, innermost-dependency-last.
 
 </details>
 
@@ -773,7 +761,7 @@ metadata:
 spec:
   channel: fast
   name: devworkspace-operator
-  source: community-operators
+  source: redhat-operators
   sourceNamespace: openshift-marketplace
   installPlanApproval: Manual          # ← the gate
 ```
@@ -855,14 +843,7 @@ oc get pods -n openshift-operators | grep devworkspace
 
 **Why Manual approval matters in production (and on the exam):** with Manual, every *future* update also parks an InstallPlan awaiting approval. This lets admins control exactly when an operator upgrades — critical for operators tied to cluster version compatibility, or where an unplanned upgrade could break running workloads. The exam phrasing is usually "configure the operator so that updates are not applied automatically."
 
-**Cleanup (reuse Lab 8.3):**
-
-```bash
-CSV=$(oc get sub devworkspace-operator -n openshift-operators -o jsonpath='{.status.installedCSV}')
-oc delete sub devworkspace-operator -n openshift-operators
-oc delete csv $CSV -n openshift-operators
-oc get crd -o name | grep devfile.io | xargs oc delete 2>/dev/null
-```
+**Cleanup:** run Lab 8.3 Steps 1–6 — for DevWorkspace that includes removing its webhooks (Step 5), not just the Subscription, CSV and CRDs.
 
 </details>
 
@@ -890,10 +871,20 @@ oc get crd -o name | grep devfile.io | xargs oc delete 2>/dev/null
 3. **Deleting the Subscription doesn't delete the CSV** — you have to do both for a real uninstall.
 4. **CRDs linger** — explicit `oc delete crd` is needed for a full purge.
 5. **Manual approval keeps the operator stuck** until you patch the InstallPlan. The exam may test exactly this.
+6. **Dependencies are installed automatically but never removed** — uninstall the dependent operator first, then the dependency if nothing else needs it.
+7. **Operators can leave runtime objects behind** (webhooks, cluster roles) that OLM doesn't know about. Check the operator's docs for its uninstall steps.
 
 ## 🔗 Docs to bookmark
 
-- OLM concepts: https://docs.openshift.com/container-platform/4.18/operators/understanding/olm/olm-understanding-operatorhub.html
-- Install via CLI: https://docs.openshift.com/container-platform/4.18/operators/admin/olm-adding-operators-to-cluster.html#olm-installing-operator-from-operatorhub-using-cli
-- Uninstall: https://docs.openshift.com/container-platform/4.18/operators/admin/olm-deleting-operators-from-cluster.html
-- Channels & updates: https://docs.openshift.com/container-platform/4.18/operators/admin/olm-upgrading-operators.html
+Swap `4.18` for your exam's version; if a page 404s, open the guide's `index` page.
+
+- Understanding Operators (OLM, OperatorHub, catalogs, OperatorGroups): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/operators/understanding-operators>
+- Administrator tasks (adding operators via console & CLI, updating, deleting): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/operators/administrator-tasks>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Developer self-service](./07-developer-self-service.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Application security ➡️](./09-application-security.md)
+
+</div>

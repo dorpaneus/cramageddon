@@ -123,7 +123,7 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 *Goal: Control traffic flow into and within the cluster.*
 
-**Theory** ([`05-network-security.md`](objectives/05-network-security.md)) - networking stack · routes · TLS (edge / passthrough / re-encrypt) · NetworkPolicy · IngressController · SDN troubleshooting
+**Theory** ([`05-network-security.md`](objectives/05-network-security.md)) - networking stack · routes · TLS (edge / passthrough / re-encrypt) · NetworkPolicy · IngressController · internal TLS (service serving certificates) · SDN troubleshooting
 
 <details><summary>📋 Official objective coverage (Red Hat)</summary>
 
@@ -140,9 +140,8 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 - [ ] **Lab 5.2:** [Passthrough route](objectives/05-network-security.md#lab-52--passthrough-route-25-min)
 - [ ] **Lab 5.3:** [NetworkPolicy fortress (ingress/egress)](objectives/05-network-security.md#lab-53--networkpolicy-fortress-30-min)
 - [ ] **Lab 5.4:** [Troubleshoot a 503](objectives/05-network-security.md#lab-54--troubleshoot-a-503-20-min)
-- **Key Commands:** `oc create route edge/passthrough/reencrypt`, `oc get endpointslices`, `oc apply -f networkpolicy.yaml`.
-
-> 📝 **Not yet covered:** internal TLS with **service serving certificates** (`service.beta.openshift.io/serving-cert-secret-name`) and **CA bundle injection** (`service.beta.openshift.io/inject-cabundle`). Both fall under "Secure external and internal traffic using TLS certificates".
+- [ ] **Lab 5.5:** [Internal TLS with service serving certificates](objectives/05-network-security.md#lab-55--internal-tls-with-service-serving-certificates-25-min)
+- **Key Commands:** `oc create route edge/passthrough/reencrypt`, `oc get endpointslices`, `oc apply -f networkpolicy.yaml`, `oc annotate service … service.beta.openshift.io/serving-cert-secret-name=…`.
 
 ## 🛠️ 6. Expose Non-HTTP/SNI Applications
 
@@ -267,7 +266,7 @@ Always default to `Deployment` over `DeploymentConfig` on the exam unless a ques
 
 ## 📚 About the documentation links
 
-Every objective file has a **🔗 Docs to bookmark** section at the bottom. OpenShift docs moved to **docs.redhat.com** on March 12, 2025; old `docs.openshift.com` links now redirect. Use this base URL, swapping in your exam's version:
+Every objective file has a **🔗 Docs to bookmark** section at the bottom, pointing at the 4.18 docs (links checked October 2026). OpenShift docs moved to **docs.redhat.com** on March 12, 2025. Old `docs.openshift.com` links are unreliable: since 4.18 several guides were split (networking became *Ingress and load balancing*, *Network security*, *Networking Operators*, …), so old paths often don't map to a current page. Use this base URL, swapping in your exam's version:
 
 ```
 https://docs.redhat.com/en/documentation/openshift_container_platform/<version>/
@@ -298,8 +297,6 @@ ex280/
 │   └── 10-storage-supplement.md       ← PV/PVC/StorageClass (supplement, not a current objective)
 ├── mock-exams/
 │   └── week1-mock.md                  ← 30 min, Obj 1–2
-├── ch/
-│   └── ch-10.md                       ← older storage chapter (superseded by 10-storage-supplement.md)
 └── drafts/                            ← work in progress, not part of the study path
 ```
 

@@ -72,7 +72,8 @@ oc explain --recursive deployment.spec | less
 
 ```bash
 # Image rollout
-oc set image deployment/hello hello=quay.io/openshifttest/hello-openshift:1.3.0
+oc set image deployment/hello hello=quay.io/openshifttest/hello-openshift:<new-tag>
+#   (container "hello" = the name in §1's YAML; pin a digest instead with …/hello-openshift@sha256:<digest>)
 oc rollout status deployment/hello
 oc rollout history deployment/hello
 oc rollout undo deployment/hello                   # rollback

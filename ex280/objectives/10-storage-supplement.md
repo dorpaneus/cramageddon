@@ -1,6 +1,12 @@
+<div align="center">
+
+[⬅️ Prev: Application security](./09-application-security.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Week 1 mock exam ➡️](../mock-exams/week1-mock.md)
+
+</div>
+
 # Supplement: Storage (PV / PVC / StorageClass)
 
-**Status:** Not a standalone objective in EX280 v4.18 (it was in v4.14). Storage was folded into "Deploy applications" and "Manage resource manifests" in the 4.18 revision. You will still encounter storage in practice — stateful apps (databases, queues, image registries) require PVCs, and several mocks in this repo use them.
+**Status:** Not an objective on the current EX280 list (it was in the 4.14-based version). Red Hat doesn't say where, if anywhere, storage went — but stateful apps (databases, queues, image registries) need PVCs, so expect them inside other tasks (templates such as `mysql-persistent`, Helm charts, StatefulSets).
 
 Treat this chapter as **required reading**. Estimated time: 3 hours.
 
@@ -393,8 +399,7 @@ oc get templates -n openshift | grep -i persistent
 # postgresql-persistent
 # mysql-persistent
 # mariadb-persistent
-# redis-persistent
-# mongodb-persistent
+# … (the exact list depends on the Cluster Samples Operator content of your cluster)
 
 oc process openshift//postgresql-persistent \
   -p POSTGRESQL_USER=app \
@@ -415,7 +420,8 @@ These pull from the default StorageClass automatically.
 | `PVC` stuck `Pending` | No SC matches / no default SC / no PV with matching capacity & mode | `oc describe pvc <name>` → check events; verify SC exists and is default |
 | `Pod` stuck `ContainerCreating`, event "MountVolume.SetUp failed" | Permissions on the volume don't match container UID (SCC issue) | Check SCC; consider `fsGroup` in pod spec, or anyuid SCC |
 | `Pod` stuck `Pending` "0/N nodes had taints / volume node affinity conflict" | Zone-locked PV, pod scheduled in different zone | Recreate PVC; with `WaitForFirstConsumer`, schedule pod with desired zone selector |
-| Data loss after pod delete | Reclaim policy was `Delete` on a dynamic PV | Set new SC's policy to `Retain` for important data |
+| Data gone after the pod is recreated | The data wasn't on the PVC: `emptyDir` used instead of a PVC, or the `mountPath` doesn't match where the app writes | Check `oc set volume deployment/<d>` and the image's data directory |
+| Data gone after the **PVC** was deleted | Reclaim policy `Delete` (the default for dynamic provisioning) | Use a StorageClass with `reclaimPolicy: Retain`, or patch the PV to `Retain` before deleting the PVC |
 | Can't resize PVC | `allowVolumeExpansion: false` on SC | Use a different SC or recreate with new size |
 
 ```bash
@@ -590,6 +596,7 @@ Static provisioning: an admin pre-creates a PV, and a PVC binds to it by matchin
 - Cluster-admin (PVs are cluster-scoped).
 - Project: `oc new-project static-lab`.
 - A single-node cluster (CRC/SNO) makes hostPath predictable; on multi-node the pod must land on the node holding the path.
+- Node access via `oc debug node/<node>` (to prepare the directory in Step 1).
 
 ---
 
@@ -597,6 +604,19 @@ Static provisioning: an admin pre-creates a PV, and a PVC binds to it by matchin
 
 <details>
 <summary>💡 Solution</summary>
+
+**Prepare the directory on the node first.** A pod under the default `restricted-v2` SCC runs as a random non-root UID, and RHCOS enforces SELinux. A directory the kubelet creates is owned by root and has the wrong SELinux type, so the pod couldn't write to it:
+
+```bash
+NODE=$(oc get nodes -o jsonpath='{.items[0].metadata.name}')
+oc debug node/$NODE -- chroot /host sh -c \
+  'mkdir -p /var/lab-pv1 && chmod 0777 /var/lab-pv1 && chcon -t container_file_t /var/lab-pv1 && ls -Zd /var/lab-pv1'
+# system_u:object_r:container_file_t:s0 /var/lab-pv1
+```
+
+(`/var` is the writable, persistent part of the RHCOS filesystem. This kind of node-level preparation is exactly why real clusters use a CSI driver or the Local Storage Operator instead.)
+
+Then create the PV pointing at it:
 
 ```bash
 cat <<'EOF' | oc apply -f -
@@ -612,8 +632,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   hostPath:
-    path: /tmp/pv1
-    type: DirectoryOrCreate
+    path: /var/lab-pv1
+    type: Directory          # must already exist (prepared above)
 EOF
 
 oc get pv local-pv
@@ -716,7 +736,7 @@ oc exec -n static-lab deploy/writer -- cat /data/proof.txt
 # persisted!
 ```
 
-**Gotcha — hostPath on multi-node:** if the replacement pod schedules onto a *different* node than the one holding `/tmp/pv1`, the file won't be there (each node has its own `/tmp`). On CRC/SNO there's only one node, so it always works. This is exactly why hostPath is lab-only.
+**Gotcha — hostPath on multi-node:** if the replacement pod schedules onto a *different* node than the one holding `/var/lab-pv1`, the file won't be there (each node has its own directory). On CRC/SNO there's only one node, so it always works. This is exactly why hostPath is lab-only.
 
 </details>
 
@@ -739,7 +759,7 @@ oc get pv local-pv
 ```
 
 **`STATUS: Released`, not `Available`.** Because the reclaim policy is `Retain`, when the PVC is deleted:
-- The PV is **not** deleted (data at `/tmp/pv1` is preserved).
+- The PV is **not** deleted (data at `/var/lab-pv1` is preserved).
 - The PV moves to `Released` — it still references the old claim and **cannot be re-bound** by a new PVC until an admin clears it.
 
 **To make the PV reusable**, remove the stale claim reference:
@@ -763,6 +783,7 @@ oc get pv local-pv
 ```bash
 oc delete pv local-pv
 oc delete project static-lab
+oc debug node/$NODE -- chroot /host rm -rf /var/lab-pv1     # remove the directory from the node
 ```
 
 </details>
@@ -981,7 +1002,7 @@ oc get sc
 # lab-default (default) ebs.csi.aws.com   ...   true
 ```
 
-**Gotcha — two defaults is an error state.** If both are marked `true`, PVC creation without an explicit class becomes ambiguous and Kubernetes picks unpredictably (and warns). Always unset the old one when setting a new one.
+**Gotcha — two defaults is a misconfiguration.** If both are marked `true`, a PVC without an explicit class gets the most recently created default (Kubernetes 1.26+), and the storage operator may report a warning — easy to miss and confusing. Always unset the old one when setting a new one.
 
 </details>
 
@@ -1216,7 +1237,7 @@ If you can do this in 10 minutes from memory, storage is no longer a risk on the
 - CSI driver internals.
 - Writing your own StorageClass for a new backend (operator-installed in real life).
 - VolumeSnapshot details beyond knowing they exist.
-- ODF / Ceph configuration (separate exam: EX358).
+- ODF / Ceph configuration (separate exam: EX370, Red Hat Certified Specialist in OpenShift Data Foundation).
 
 What to **definitely** know cold:
 - PVC YAML with access mode, size, optional storageClassName.
@@ -1224,3 +1245,20 @@ What to **definitely** know cold:
 - Default SC inspection.
 - Reclaim policy difference (Delete vs Retain).
 - Reading PVC events to diagnose `Pending`.
+
+---
+
+## 🔗 Docs to bookmark
+
+Swap `4.18` for your exam's version; if a page 404s, open the guide's `index` page.
+
+- Understanding persistent storage (PVs, PVCs, access modes, reclaim policy, binding): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/storage/understanding-persistent-storage>
+- Configuring persistent storage (backends, incl. hostPath and local volumes): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/storage/configuring-persistent-storage>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Application security](./09-application-security.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Week 1 mock exam ➡️](../mock-exams/week1-mock.md)
+
+</div>

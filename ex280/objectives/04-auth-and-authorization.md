@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: Deploy applications](./03-deploy-applications.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Network security ➡️](./05-network-security.md)
+
+</div>
+
 # Objective 4 - Manage Authentication and Authorization
 
 > **Exam study points:**
@@ -574,3 +580,11 @@ Swap `4.18` for your exam's version. If a page 404s, open the guide index: <http
 - Understanding authentication (users, identities, groups): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/authentication_and_authorization/understanding-authentication>
 - RBAC: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/authentication_and_authorization/using-rbac>
 - Removing kubeadmin: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/authentication_and_authorization/removing-kubeadmin>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Deploy applications](./03-deploy-applications.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Network security ➡️](./05-network-security.md)
+
+</div>

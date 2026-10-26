@@ -1,3 +1,9 @@
+<div align="center">
+
+[⬅️ Prev: Authentication & authorization](./04-auth-and-authorization.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Expose non-HTTP/SNI applications ➡️](./06-expose-non-http-sni.md)
+
+</div>
+
 # Objective 5 — Configure Network Security
 
 > **Exam study points:**
@@ -203,13 +209,24 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              network.openshift.io/policy-group: ingress
+              policy-group.network.openshift.io/ingress: ""
       ports:
         - protocol: TCP
           port: 8080
 ```
 
-> Newer label is `network.openshift.io/policy-group: ingress`; older docs may show `policy-group.network.openshift.io/ingress`. Both `openshift-ingress` and `openshift-host-network` are commonly labeled this way; verify on your cluster with `oc get ns -L network.openshift.io/policy-group`.
+> **Which label?** The docs' preferred selector for OVN-Kubernetes is `policy-group.network.openshift.io/ingress: ""`. The `openshift-ingress` namespace also carries the older `network.openshift.io/policy-group: ingress`, so policies using either still match — but use the documented one. Check with `oc get ns openshift-ingress --show-labels`.
+>
+> **HostNetwork routers (CRC, SNO, many bare-metal clusters):** if the IngressController publishes with `HostNetwork`, router traffic comes from the **host network**, not from `openshift-ingress`, and the policy above won't match it. Add a second `from` entry:
+>
+> ```yaml
+>     - from:
+>         - namespaceSelector:
+>             matchLabels:
+>               policy-group.network.openshift.io/host-network: ""
+> ```
+>
+> Find out which case you're in: `oc get ingresscontroller default -n openshift-ingress-operator -o jsonpath='{.status.endpointPublishingStrategy.type}{"\n"}'` (`HostNetwork` vs `LoadBalancerService`).
 
 ### Allow from a specific other namespace + specific pod
 
@@ -244,8 +261,8 @@ spec:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: openshift-dns}
       ports:
-        - {protocol: UDP, port: 53}
-        - {protocol: TCP, port: 53}
+        - {protocol: UDP, port: 5353}   # the DNS pods listen on 5353; the Service maps 53 → 5353,
+        - {protocol: TCP, port: 5353}   # and policy is matched on the pod's port, so 53 alone would block DNS
     - to:
         - ipBlock: {cidr: 10.0.0.5/32}
       ports:
@@ -285,6 +302,41 @@ oc patch ingresscontroller default -n openshift-ingress-operator \
   --type=merge \
   -p '{"spec":{"defaultCertificate":{"name":"custom-router-cert"}}}'
 ```
+
+## §5b — Internal TLS: service serving certificates
+
+Routes cover **external** TLS. For TLS **inside** the cluster (pod → Service), OpenShift's `service-ca` operator can issue certificates for you, signed by a cluster-internal CA, and keep them rotated.
+
+**1. Ask for a serving certificate** — annotate the Service with the name of the Secret you want:
+
+```bash
+oc annotate service secure \
+  service.beta.openshift.io/serving-cert-secret-name=secure-tls
+```
+
+The operator creates Secret `secure-tls` (type `kubernetes.io/tls`, keys `tls.crt` / `tls.key`) for the DNS names `secure.<namespace>.svc` and `secure.<namespace>.svc.cluster.local`. Mount it into the pod and point the server at it.
+
+**2. Give clients the CA** — annotate a ConfigMap and the operator injects the CA bundle under the key `service-ca.crt`:
+
+```bash
+oc create configmap service-ca
+oc annotate configmap service-ca service.beta.openshift.io/inject-cabundle=true
+oc get configmap service-ca -o jsonpath='{.data.service-ca\.crt}' | head -2
+# -----BEGIN CERTIFICATE-----
+```
+
+Clients mount that ConfigMap and verify the server with it (e.g. `curl --cacert /etc/ca/service-ca.crt https://secure.<ns>.svc:8443`).
+
+**3. Re-encrypt routes get simpler** — when the backend uses a service serving certificate, a `reencrypt` route doesn't need `--dest-ca-cert`: the router already trusts the service CA.
+
+```bash
+oc create route reencrypt secure --service=secure --port=8443
+```
+
+| Annotation | On | Result |
+|------------|----|--------|
+| `service.beta.openshift.io/serving-cert-secret-name: <secret>` | Service | TLS Secret for `<svc>.<ns>.svc` |
+| `service.beta.openshift.io/inject-cabundle: "true"` | ConfigMap | Key `service-ca.crt` with the service CA |
 
 ## §6 — Troubleshooting SDN issues
 
@@ -459,7 +511,7 @@ oc patch route hello --type=merge \
 
 | Value | HTTP (port 80) behavior |
 |-------|-------------------------|
-| `None` (default) | Plain HTTP is **disabled** — only HTTPS works |
+| `None` (default) | Plain HTTP is **not served** for this route (the router answers 503) — only HTTPS works |
 | `Redirect` | HTTP requests get a 301/302 redirect to HTTPS |
 | `Allow` | Plain HTTP is served alongside HTTPS (not recommended) |
 
@@ -490,7 +542,7 @@ curl -kI http://$HOST
 
 The `-I` fetches headers only; `-k` ignores the self-signed cert warning. A `302`/`301` with a `Location:` header pointing to `https://` confirms the redirect policy is working.
 
-**If you get `Connection refused` on port 80:** the `insecureEdgeTerminationPolicy` is probably `None` (the default) — plain HTTP is disabled. Re-check Step 4.
+**If you get `503 Service Unavailable` (the router's "Application is not available" page) on HTTP:** the `insecureEdgeTerminationPolicy` is probably `None` (the default) — the router still listens on port 80 but serves nothing for this host over plain HTTP. Re-check Step 4.
 
 </details>
 
@@ -627,9 +679,9 @@ oc get svc secure -n lab52
 # secure   ClusterIP   172.30.x.x    8443/TCP
 
 # Confirm endpoints are populated (pod is behind the service)
-oc get endpoints secure -n lab52
-# NAME     ENDPOINTS
-# secure   10.x.x.x:8443
+oc get endpointslices -n lab52 -l kubernetes.io/service-name=secure
+# NAME           ADDRESSTYPE   PORTS   ENDPOINTS
+# secure-xxxxx   IPv4          8443    10.x.x.x
 ```
 
 </details>
@@ -824,24 +876,30 @@ spec:
   - from:
     - namespaceSelector:
         matchLabels:
-          network.openshift.io/policy-group: ingress
+          policy-group.network.openshift.io/ingress: ""
+    - namespaceSelector:                       # only needed when the router uses HostNetwork
+        matchLabels:                           # (CRC, SNO, many bare-metal clusters) — harmless otherwise
+          policy-group.network.openshift.io/host-network: ""
 ```
 
 ```bash
 oc apply -f allow-router.yaml -n lab53
 
-# The router's namespace must carry the policy-group label. On modern OCP the
-# openshift-ingress namespace is labeled automatically; verify:
-oc get ns openshift-ingress --show-labels | grep policy-group
-# If missing, label it:
-oc label ns openshift-ingress network.openshift.io/policy-group=ingress --overwrite
+# The ingress operator labels the router namespace itself; just verify (don't relabel system namespaces):
+oc get ns openshift-ingress --show-labels | tr ',' '\n' | grep policy-group
+# policy-group.network.openshift.io/ingress=
+# network.openshift.io/policy-group=ingress
+
+# Which publishing strategy does the router use?
+oc get ingresscontroller default -n openshift-ingress-operator \
+  -o jsonpath='{.status.endpointPublishingStrategy.type}{"\n"}'
 
 # External route now works:
 curl -m 5 -I http://$(oc get route hello -n lab53 -o jsonpath='{.spec.host}')
 # HTTP/1.1 200 OK
 ```
 
-**Why `network.openshift.io/policy-group: ingress`:** this is the well-known label OpenShift uses to identify the ingress/router namespace in NetworkPolicy selectors. Using a `namespaceSelector` matching it is the canonical "allow the router in" pattern. (The cross-namespace probe from `frontend` is still blocked — we only allowed the router.)
+**Why these labels:** `policy-group.network.openshift.io/ingress: ""` is the selector the docs prescribe for "allow the router in" on OVN-Kubernetes. When the router runs on the host network (`HostNetwork` strategy), its traffic doesn't come from `openshift-ingress` at all, so you also allow `policy-group.network.openshift.io/host-network: ""`. The two list items are separate `-` entries — **OR** — so either source is allowed. (The cross-namespace probe from `frontend` is still blocked — we only allowed the router.)
 
 </details>
 
@@ -1035,10 +1093,12 @@ oc get svc hello -o jsonpath='selector={.spec.selector}{"\n"}'
 # selector={"app":"hello"}    ← if {"app":"nope"} → Fault C
 
 # 3. ENDPOINTS — THE key diagnostic. Empty endpoints = service matches no ready pods.
-oc get endpoints hello
-# NAME    ENDPOINTS
-# hello   10.x.x.x:8080          ← healthy
-# hello   <none>                 ← BROKEN: selector mismatch (C) or no pods (D)
+oc get endpointslices -l kubernetes.io/service-name=hello
+# NAME          ADDRESSTYPE   PORTS     ENDPOINTS
+# hello-xxxxx   IPv4          8080      10.x.x.x     ← healthy
+# hello-xxxxx   IPv4          <unset>   <unset>      ← BROKEN: selector mismatch (C) or no pods (D)
+# (oc describe svc hello shows the same on its "Endpoints:" line;
+#  oc get endpoints still works but is deprecated from OCP 4.20)
 
 # 4. PODS — are any running and matching the selector?
 oc get pods -l app=hello
@@ -1052,10 +1112,10 @@ oc get pods -l app=hello
 |---------------------|-------|
 | Route `to.name` names a service that doesn't exist | A (wrong service name) |
 | Route `targetPort` ≠ the port the pod serves; endpoints healthy | B (wrong targetPort) |
-| Service selector ≠ pod labels; endpoints `<none>`; pods running | C (selector mismatch) |
-| No pods at all; endpoints `<none>` | D (no running pods) |
+| Service selector ≠ pod labels; endpoints empty; pods running | C (selector mismatch) |
+| No pods at all; endpoints empty | D (no running pods) |
 
-**Endpoints is the linchpin.** A populated `oc get endpoints` means Service→Pod wiring is good, so the fault is upstream (Route). An empty `<none>` means the Service isn't finding pods, so the fault is the selector or the pods themselves.
+**Endpoints are the linchpin.** Populated endpoints mean Service→Pod wiring is good, so the fault is upstream (Route). Empty endpoints mean the Service isn't finding ready pods, so the fault is the selector or the pods themselves.
 
 </details>
 
@@ -1085,8 +1145,8 @@ oc scale deployment hello --replicas=1
 **Confirm the whole chain is healthy again:**
 
 ```bash
-oc get endpoints hello
-# hello   10.x.x.x:8080     ← populated again
+oc get endpointslices -l kubernetes.io/service-name=hello
+# hello-xxxxx   IPv4   8080   10.x.x.x     ← populated again
 
 curl -sI http://$ROUTE | head -1
 # HTTP/1.1 200 OK
@@ -1097,7 +1157,7 @@ curl -sI http://$ROUTE | head -1
 ```bash
 oc get route <r> -o yaml           # spec.to.name, spec.port.targetPort
 oc get svc <s> -o wide             # selector, ports
-oc get endpoints <s>               # <none> = the smoking gun
+oc get endpointslices -l kubernetes.io/service-name=<s>   # empty = the smoking gun
 oc get pods -l <selector> -o wide  # running? right labels?
 oc describe route <r>              # router admission errors, host conflicts
 oc logs -n openshift-ingress deploy/router-default | tail  # router-side clues
@@ -1115,6 +1175,155 @@ oc delete project lab54
 
 ---
 
+### Lab 5.5 — Internal TLS with service serving certificates (25 min)
+
+Secure pod-to-service traffic with a certificate issued by OpenShift's service CA, verify it from a client pod that trusts the injected CA bundle, then expose it with a re-encrypt route.
+
+**Prerequisites:**
+- Project: `oc new-project lab55`.
+- The `nginx-ssl-conf` approach from Lab 5.2 (it's repeated below, so you don't need to have done 5.2).
+
+1. Create a Service `secure` (port 8443) annotated to receive a serving certificate in Secret `secure-tls`.
+2. Deploy a UBI nginx that serves TLS on 8443 using that Secret.
+3. Create a ConfigMap with the injected service CA, and `curl` the Service over HTTPS from a client pod **without** `-k`.
+4. Expose it with a re-encrypt route that needs no destination CA.
+
+<details>
+<summary>💡 Solution Step 1</summary>
+
+Create the Service first, so the certificate exists before the pod needs it:
+
+```bash
+oc new-project lab55
+
+oc create service clusterip secure --tcp=8443:8443
+oc annotate service secure service.beta.openshift.io/serving-cert-secret-name=secure-tls
+
+oc get secret secure-tls
+# NAME         TYPE                DATA   AGE
+# secure-tls   kubernetes.io/tls   2      5s
+
+# Which names is it valid for?
+oc get secret secure-tls -o jsonpath='{.data.tls\.crt}' | base64 -d \
+  | openssl x509 -noout -subject -ext subjectAltName
+# subject=CN=secure.lab55.svc
+# X509v3 Subject Alternative Name:
+#     DNS:secure.lab55.svc, DNS:secure.lab55.svc.cluster.local
+```
+
+`oc create service clusterip secure` sets the selector `app=secure`, which the Deployment in Step 2 uses.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 2</summary>
+
+```bash
+cat > nginx-ssl.conf <<'EOF'
+server {
+    listen 8443 ssl;
+    ssl_certificate     /etc/nginx/tls/tls.crt;
+    ssl_certificate_key /etc/nginx/tls/tls.key;
+    location / { return 200 "hello over internal TLS\n"; }
+}
+EOF
+oc create configmap nginx-ssl-conf --from-file=default.conf=nginx-ssl.conf
+
+cat <<'EOF' | oc apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: secure}}
+  template:
+    metadata: {labels: {app: secure}}
+    spec:
+      containers:
+      - name: nginx
+        image: registry.access.redhat.com/ubi9/nginx-124:latest
+        command: ["nginx","-g","daemon off;"]   # the image's default command only prints usage
+        ports:
+        - {containerPort: 8443}
+        volumeMounts:
+        - {name: tls, mountPath: /etc/nginx/tls, readOnly: true}
+        - {name: conf, mountPath: /opt/app-root/etc/nginx.d, readOnly: true}
+      volumes:
+      - {name: tls, secret: {secretName: secure-tls}}
+      - {name: conf, configMap: {name: nginx-ssl-conf}}
+EOF
+
+oc rollout status deployment/secure
+oc get endpointslices -l kubernetes.io/service-name=secure      # 1 address on 8443
+```
+
+</details>
+
+<details>
+<summary>💡 Solution Step 3</summary>
+
+```bash
+oc create configmap service-ca
+oc annotate configmap service-ca service.beta.openshift.io/inject-cabundle=true
+oc get configmap service-ca -o jsonpath='{.data}' | cut -c1-60
+# {"service-ca.crt":"-----BEGIN CERTIFICATE-----...
+```
+
+Run a client that mounts the CA and verifies the server certificate:
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client
+spec:
+  restartPolicy: Never
+  containers:
+  - name: curl
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    command: ["curl","-sS","--cacert","/etc/ca/service-ca.crt","https://secure.lab55.svc:8443"]
+    volumeMounts:
+    - {name: ca, mountPath: /etc/ca, readOnly: true}
+  volumes:
+  - {name: ca, configMap: {name: service-ca}}
+EOF
+
+oc logs client        # once the pod has Completed
+# hello over internal TLS
+```
+
+No `-k`: curl verified the chain against the service CA and the hostname against the certificate's SAN. Try `https://<pod-IP>:8443` instead and it fails with a name-mismatch error — the certificate is for the **Service name**, not the pod.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 4</summary>
+
+```bash
+oc create route reencrypt secure --service=secure --port=8443
+curl -sk https://$(oc get route secure -o jsonpath='{.spec.host}')
+# hello over internal TLS
+```
+
+Two TLS legs: client → router uses the router's default (wildcard) certificate (hence `-k` with a self-signed ingress CA), router → pod uses the service serving certificate. No `--dest-ca-cert` was needed because the router trusts the service CA.
+
+**Verification checklist:**
+
+```bash
+oc get svc secure -o jsonpath='{.metadata.annotations.service\.beta\.openshift\.io/serving-cert-secret-name}{"\n"}'   # secure-tls
+oc get secret secure-tls -o jsonpath='{.type}{"\n"}'                                                                    # kubernetes.io/tls
+oc get cm service-ca -o jsonpath='{.metadata.annotations}{"\n"}'                                                        # inject-cabundle
+oc get route secure -o jsonpath='{.spec.tls.termination}{"\n"}'                                                         # reencrypt
+```
+
+Cleanup: `oc delete project lab55`
+
+</details>
+
+---
+
 ## ⚡ Drills (timed, no docs)
 
 | Drill | Target time |
@@ -1125,6 +1334,7 @@ oc delete project lab54
 | Write a NetworkPolicy allowing ingress from `app=client` only | 90 s |
 | Allow the OpenShift router to reach pods in your namespace | 90 s |
 | Patch a Route to change its hostname | 30 s |
+| Get a service serving certificate into a Secret and inject the CA into a ConfigMap | 60 s |
 
 ---
 
@@ -1135,10 +1345,22 @@ oc delete project lab54
 3. **Once any NetworkPolicy exists in a namespace, default-allow disappears for pods matching its podSelector.** A common mistake: writing an "allow X" policy without realising you've also blocked everything else.
 4. **The router namespace must be allowed in ingress NetworkPolicies** — many candidates write strict policies that accidentally lock out the router and break their own Route.
 5. **DNS uses `<svc>.<ns>.svc.cluster.local`** — wrong namespace = NXDOMAIN.
+6. **Egress policies must allow DNS on port 5353** (the DNS pods' port), not just 53.
+7. **HostNetwork routers** (CRC, SNO, bare metal) need the `policy-group.network.openshift.io/host-network` selector in your allow-from-router policy.
 
 ## 🔗 Docs to bookmark
 
-- Routes: https://docs.openshift.com/container-platform/4.18/networking/routes/route-configuration.html
-- TLS routes: https://docs.openshift.com/container-platform/4.18/networking/routes/secured-routes.html
-- NetworkPolicy: https://docs.openshift.com/container-platform/4.18/networking/network_policy/about-network-policy.html
-- IngressController: https://docs.openshift.com/container-platform/4.18/networking/ingress-operator.html
+Since 4.18 the networking docs are split into several guides (*Ingress and load balancing*, *Network security*, *Networking Operators*, …). Swap `4.18` for your exam's version; if a page 404s, open the guide's `index` page.
+
+- Routes, incl. edge / passthrough / re-encrypt: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/ingress_and_load_balancing/routes>
+- Network policy: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/network_security/network-policy>
+- Ingress Operator / IngressController: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/networking_operators/configuring-ingress>
+- Service serving certificates & CA bundle injection (*Security and compliance* → "Configuring certificates" → "Securing service traffic using service serving certificate secrets"): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/security_and_compliance/configuring-certificates>
+
+---
+
+<div align="center">
+
+[⬅️ Prev: Authentication & authorization](./04-auth-and-authorization.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Expose non-HTTP/SNI applications ➡️](./06-expose-non-http-sni.md)
+
+</div>
