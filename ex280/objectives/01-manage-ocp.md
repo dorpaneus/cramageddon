@@ -859,33 +859,33 @@ Troubleshooting is a large part of the exam. This lab walks through the most com
 
 **Prerequisites:** a fresh project: `oc new-project lab14`.
 
-1. Deploy a deliberately broken app: `oc new-app --image=nginx:does-not-exist`.
+1. Deploy an app with a mistyped image tag: `oc new-app --image=quay.io/openshifttest/hello-openshift:does-not-exist`.
 2. Use `oc describe` / `oc get events` to identify the cause.
-3. Fix it by pointing the Deployment at a working image: `registry.access.redhat.com/ubi9/nginx-124:latest`.
+3. Fix it by pointing the Deployment at the correct tag, `1.2.0`.
 4. Break it again: scale to 2 replicas and set an impossible CPU request (`resources.requests.cpu: "1000"` — 1000 whole cores). Diagnose with events, then fix.
 
 <details>
 <summary>💡 Solution Step 1</summary>
 
 ```bash
-oc new-app --image=nginx:does-not-exist
-# warning: cannot use image "nginx:does-not-exist" ... (the image can't be inspected)
+oc new-app --image=quay.io/openshifttest/hello-openshift:does-not-exist
+# warning: cannot use image "...:does-not-exist" ... (the image can't be inspected)
 # --> Creating resources ...
-#     deployment.apps "nginx" created
+#     deployment.apps "hello-openshift" created
 # --> Success
 ```
 
-`oc new-app --image=...` creates a **Deployment** (not a DeploymentConfig).
+`oc new-app --image=...` creates a **Deployment** (not a DeploymentConfig), named after the image. Because the image couldn't be inspected, `new-app` doesn't know its ports, so it may not create a Service — that's fine for this lab.
 
 The pod will not start. Confirm:
 
 ```bash
 oc get pods
-# NAME                     READY   STATUS             RESTARTS   AGE
-# nginx-xxxxxxxxx-yyyyy    0/1     ImagePullBackOff   0          30s
+# NAME                               READY   STATUS             RESTARTS   AGE
+# hello-openshift-xxxxxxxxx-yyyyy    0/1     ImagePullBackOff   0          30s
 ```
 
-`ImagePullBackOff` means the kubelet keeps retrying the pull and the registry keeps rejecting it. (Because the image couldn't be inspected, `new-app` doesn't know its ports, so it may not create a Service — that's fine for this lab.)
+`ImagePullBackOff` means the kubelet keeps retrying the pull and the registry keeps rejecting it.
 
 </details>
 
@@ -895,7 +895,7 @@ oc get pods
 **Method A — `oc describe pod`:**
 
 ```bash
-oc describe pod -l deployment=nginx | tail -20
+oc describe pod -l deployment=hello-openshift | tail -20
 ```
 
 (`oc new-app` labels the pods `deployment=<name>`.) Look at the Events section at the bottom:
@@ -904,11 +904,11 @@ oc describe pod -l deployment=nginx | tail -20
 Events:
   Type     Reason     Age   From               Message
   ----     ------     ----  ----               -------
-  Normal   Scheduled  1m    default-scheduler  Successfully assigned lab14/nginx-... to worker-0
-  Normal   Pulling    1m    kubelet            Pulling image "nginx:does-not-exist"
-  Warning  Failed     45s   kubelet            Failed to pull image "nginx:does-not-exist": ... manifest unknown
+  Normal   Scheduled  1m    default-scheduler  Successfully assigned lab14/hello-openshift-... to worker-0
+  Normal   Pulling    1m    kubelet            Pulling image "quay.io/openshifttest/hello-openshift:does-not-exist"
+  Warning  Failed     45s   kubelet            Failed to pull image "...:does-not-exist": ... manifest unknown
   Warning  Failed     45s   kubelet            Error: ErrImagePull
-  Normal   BackOff    30s   kubelet            Back-off pulling image "nginx:does-not-exist"
+  Normal   BackOff    30s   kubelet            Back-off pulling image "...:does-not-exist"
   Warning  Failed     30s   kubelet            Error: ImagePullBackOff
 ```
 
@@ -923,7 +923,7 @@ oc get events --field-selector type=Warning
 **Method C — `oc describe deployment`** (Deployment-level conditions):
 
 ```bash
-oc describe deployment nginx | grep -A4 Conditions
+oc describe deployment hello-openshift | grep -A4 Conditions
 # Conditions:
 #   Type             Status  Reason
 #   ----             ------  ------
@@ -946,42 +946,42 @@ oc describe deployment nginx | grep -A4 Conditions
 **Method A — `oc set image`** (purpose-built for this):
 
 ```bash
-oc set image deployment/nginx nginx=registry.access.redhat.com/ubi9/nginx-124:latest
-# deployment.apps/nginx image updated
+# Find the container name first:
+oc get deployment hello-openshift -o jsonpath='{.spec.template.spec.containers[*].name}{"\n"}'
+# hello-openshift
+
+oc set image deployment/hello-openshift hello-openshift=quay.io/openshifttest/hello-openshift:1.2.0
+# deployment.apps/hello-openshift image updated
 ```
 
-The syntax is `<resource>/<name> <container-name>=<new-image>`. The container name `nginx` came from the image name in Step 1; check it with:
-
-```bash
-oc get deployment nginx -o jsonpath='{.spec.template.spec.containers[*].name}{"\n"}'
-```
+The syntax is `<resource>/<name> <container-name>=<new-image>`.
 
 **Method B — `oc patch`:**
 
 ```bash
-oc patch deployment nginx --type=json -p='[
-  {"op":"replace","path":"/spec/template/spec/containers/0/image","value":"registry.access.redhat.com/ubi9/nginx-124:latest"}
+oc patch deployment hello-openshift --type=json -p='[
+  {"op":"replace","path":"/spec/template/spec/containers/0/image","value":"quay.io/openshifttest/hello-openshift:1.2.0"}
 ]'
 ```
 
 **Method C — `oc edit`:**
 
 ```bash
-oc edit deployment nginx
-# Find spec.template.spec.containers[0].image, change it, save.
+oc edit deployment hello-openshift
+# Find spec.template.spec.containers[0].image, fix the tag, save.
 ```
 
 Verify the fix:
 
 ```bash
-oc rollout status deployment/nginx
-# deployment "nginx" successfully rolled out
+oc rollout status deployment/hello-openshift
+# deployment "hello-openshift" successfully rolled out
 
 oc get pods
-# nginx-bbbbbbbbb-ccccc   1/1   Running   0   20s
+# hello-openshift-bbbbbbbbb-ccccc   1/1   Running   0   20s
 ```
 
-**Why not the official `nginx:1.27` image?** It pulls fine, but it expects to run as root and write to `/var/cache/nginx`. Under the default `restricted-v2` SCC the pod gets a random non-root UID, so it goes into `CrashLoopBackOff` with `Permission denied` in `oc logs`. That's an SCC problem, not a pull problem — see Objective 9 (Lab 9.1). The Red Hat UBI nginx image is built to run as an arbitrary non-root UID and listens on 8080.
+**Variation — a pull that works but a pod that crashes:** try `oc set image deployment/hello-openshift hello-openshift=docker.io/library/nginx:1.27`. The image pulls fine, but it expects to run as root and write to `/var/cache/nginx`. Under the default `restricted-v2` SCC the pod gets a random non-root UID, so it goes into `CrashLoopBackOff` with `Permission denied` in `oc logs --previous`. That's an SCC problem, not a pull problem — see Objective 9 (Lab 9.1). Set the tag back to `hello-openshift:1.2.0` before Step 4.
 
 </details>
 
@@ -991,19 +991,19 @@ oc get pods
 **Break:**
 
 ```bash
-oc scale deployment nginx --replicas=2
-oc set resources deployment/nginx --requests=cpu=1000
-# deployment.apps/nginx resource requirements updated
+oc scale deployment hello-openshift --replicas=2
+oc set resources deployment/hello-openshift --requests=cpu=1000
+# deployment.apps/hello-openshift resource requirements updated
 ```
 
 The resource change starts a new rollout. The new ReplicaSet's pod can't be scheduled, and the rolling update keeps the old pods running while it waits:
 
 ```bash
 oc get pods
-# NAME                     READY   STATUS    RESTARTS   AGE
-# nginx-xxxxxxxxxx-aaaaa   1/1     Running   0          2m    ← old ReplicaSet, kept by the rolling update
-# nginx-xxxxxxxxxx-bbbbb   1/1     Running   0          2m    ← old ReplicaSet
-# nginx-yyyyyyyyyy-ccccc   0/1     Pending   0          15s   ← new ReplicaSet, can't schedule
+# NAME                               READY   STATUS    RESTARTS   AGE
+# hello-openshift-xxxxxxxxxx-aaaaa   1/1     Running   0          2m    ← old ReplicaSet, kept by the rolling update
+# hello-openshift-xxxxxxxxxx-bbbbb   1/1     Running   0          2m    ← old ReplicaSet
+# hello-openshift-yyyyyyyyyy-ccccc   0/1     Pending   0          15s   ← new ReplicaSet, can't schedule
 ```
 
 **Diagnose** (`oc describe` has no `--field-selector`, so find the Pending pod first):
@@ -1027,10 +1027,10 @@ Key phrase: **`Insufficient cpu`**. The scheduler did the resource math and no n
 **Fix** — set a realistic CPU request:
 
 ```bash
-oc set resources deployment/nginx --requests=cpu=100m
-# deployment.apps/nginx resource requirements updated
+oc set resources deployment/hello-openshift --requests=cpu=100m
+# deployment.apps/hello-openshift resource requirements updated
 
-oc rollout status deployment/nginx
+oc rollout status deployment/hello-openshift
 oc get pods
 # 2 replicas Running
 ```
@@ -1038,7 +1038,7 @@ oc get pods
 To remove the CPU request entirely instead of changing it:
 
 ```bash
-oc patch deployment nginx --type=json \
+oc patch deployment hello-openshift --type=json \
   -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/cpu"}]'
 ```
 
