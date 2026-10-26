@@ -242,7 +242,7 @@ volumeMounts:
     readOnly: true
 ```
 
-> 🛡️ **Pod Security Admission (PSA) note:** at 4.18, the `restricted` PSA profile rejects pods that don't drop ALL capabilities and set `runAsNonRoot: true`. If a CM/Secret mount triggers a security error, it's almost always PSA — not the volume itself. See `09-application-security.md`.
+> 🛡️ **Security note:** ConfigMap and Secret volumes are allowed by every SCC, including the default `restricted-v2`. If a pod with such a mount fails, look elsewhere: a wrong key name, a missing object (`CreateContainerConfigError`), or an image that can't run as a random non-root UID. "would violate PodSecurity" lines are usually warnings, not the cause. See `09-application-security.md`.
 
 ## §5 — Kustomize basics
 
@@ -276,10 +276,16 @@ resources:
   - deployment.yaml
   - service.yaml
   - configmap.yaml
-commonLabels:
-  app: myapp
+labels:
+  - pairs:
+      app: myapp
+    includeTemplates: true     # also label the pod templates (selectors are left alone)
 namespace: myapp
 ```
+
+> `commonLabels:` still works but is **deprecated** in Kustomize v5 (which `oc` bundles). It also rewrites selectors, which are immutable on an existing Deployment — so adding a common label later breaks `oc apply`. Prefer `labels:`.
+
+> `namespace:` sets the namespace on every resource but does **not** create it. Create the namespace first (`oc new-project` / `oc create namespace`) or include a `Namespace` manifest in `resources:`.
 
 ### Apply / preview
 
@@ -307,16 +313,19 @@ resources:
   - ../../base                     # inherit
 namespace: myapp-prod
 nameSuffix: -prod
-commonLabels:
-  env: prod
+labels:
+  - pairs:
+      env: prod
+    includeTemplates: true
 patches:
   - path: replicas-patch.yaml
     target:
       kind: Deployment
-      name: hello
+      name: hello                  # the base name — patches match before nameSuffix is applied
 images:
   - name: quay.io/openshifttest/hello-openshift
-    newTag: 1.3.0
+    newTag: "1.2.0"                # change the tag…
+    # digest: sha256:…             # …or pin an immutable digest instead (overrides the tag)
 configMapGenerator:
   - name: appconfig
     behavior: merge
@@ -335,11 +344,15 @@ spec:
   replicas: 5
 ```
 
-> Common kustomize transformers you'll be asked about: `namespace:`, `namePrefix/Suffix`, `commonLabels`, `commonAnnotations`, `images:`, `replicas:`, `configMapGenerator`, `secretGenerator`, `patches:` (strategic merge or JSON6902).
+`configMapGenerator` with `behavior: merge` overlays new keys onto a ConfigMap of the same name from the base. If the base ConfigMap was itself **generated** (`configMapGenerator`), the result gets a content-hash suffix (`appconfig-m87d62t9k4`) and Kustomize rewrites every reference to it — so changing a value triggers a new rollout automatically. If the base lists it as a plain `configmap.yaml`, the name stays `appconfig` and pods only see the new value after `oc rollout restart`.
+
+> Common kustomize transformers you'll be asked about: `namespace:`, `namePrefix/Suffix`, `labels` (formerly `commonLabels`), `commonAnnotations`, `images:`, `replicas:`, `configMapGenerator`, `secretGenerator`, `patches:` (strategic merge or JSON6902).
 
 ---
 
 ## 🧪 Labs
+
+> ℹ️ **About the `hello-openshift` image:** it's a single static binary with **no shell**, so `oc rsh` / `oc exec … env` won't work in its pods. To look inside, use `oc debug` with a different image — it copies the pod spec (including env vars and mounts) but swaps the image: `oc debug deployment/hello --image=registry.access.redhat.com/ubi9/ubi-minimal -- env`.
 
 ### Lab 2.1 — From scratch to running (20 min)
 
@@ -348,6 +361,106 @@ spec:
 3. Apply, verify pods running.
 4. Add a Service (port 8080 → targetPort 8080) and apply.
 5. Expose via Route, `curl` it.
+
+<details>
+<summary>💡 Solution Step 1</summary>
+
+```bash
+oc new-project lab21
+
+oc create deployment hello \
+  --image=quay.io/openshifttest/hello-openshift:1.2.0 \
+  --replicas=3 --port=8080 \
+  --dry-run=client -o yaml > hello.yaml
+```
+
+`oc create deployment` names the container after the image (`hello-openshift`) and labels everything `app=hello`. Check with `grep -n 'name:\|app:' hello.yaml`.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 2</summary>
+
+**Option A — edit the file.** Replace `resources: {}` under the container with:
+
+```yaml
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+```
+
+**Option B — let `oc` edit the file for you** (no cluster contact, no indentation mistakes):
+
+```bash
+oc set resources -f hello.yaml --local \
+  --requests=cpu=50m,memory=64Mi --limits=cpu=200m,memory=128Mi \
+  -o yaml > hello-res.yaml && mv hello-res.yaml hello.yaml
+```
+
+`--local` makes most `oc set …` commands work on a file instead of the live object — handy for building manifests.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 3</summary>
+
+```bash
+oc apply -f hello.yaml
+oc rollout status deployment/hello
+oc get pods -l app=hello
+# hello-xxxxx-aaaaa   1/1   Running   0   20s
+# hello-xxxxx-bbbbb   1/1   Running   0   20s
+# hello-xxxxx-ccccc   1/1   Running   0   20s
+
+# Confirm the resources landed:
+oc get deployment hello -o jsonpath='{.spec.template.spec.containers[0].resources}{"\n"}'
+```
+
+</details>
+
+<details>
+<summary>💡 Solution Step 4</summary>
+
+Generate the Service as YAML too, so it lives next to the Deployment:
+
+```bash
+oc create service clusterip hello --tcp=8080:8080 --dry-run=client -o yaml > svc.yaml
+oc apply -f svc.yaml
+```
+
+`oc create service clusterip hello` sets the selector to `app=hello` — which matches the pods from Step 3. (Alternative: `oc expose deployment hello --port=8080`, which copies the Deployment's selector.)
+
+Verify the Service found the pods:
+
+```bash
+oc get svc hello
+oc get endpointslices -l kubernetes.io/service-name=hello
+# hello-xxxxx   IPv4   8080   10.x.x.x,10.x.x.x,10.x.x.x   ← 3 addresses
+```
+
+</details>
+
+<details>
+<summary>💡 Solution Step 5</summary>
+
+```bash
+oc expose service hello
+# route.route.openshift.io/hello exposed
+
+HOST=$(oc get route hello -o jsonpath='{.spec.host}')
+curl -s http://$HOST
+# Hello OpenShift!
+```
+
+**Keep it declarative:** `oc get route hello -o yaml > route.yaml` gives you the third manifest; from then on `oc apply -f hello.yaml -f svc.yaml -f route.yaml` recreates the whole app.
+
+Keep `lab21` for Lab 2.2.
+
+</details>
 
 ### Lab 2.2 — Patch storm (15 min)
 
@@ -358,6 +471,94 @@ In `lab21`:
 3. Change replicas to 5 with `oc patch`.
 4. Add a label `tier=frontend` to the deployment with `oc label`.
 
+<details>
+<summary>💡 Solution Step 1</summary>
+
+```bash
+oc set image deployment/hello hello-openshift=quay.io/openshifttest/hello-openshift:does-not-exist
+# deployment.apps/hello image updated
+
+oc rollout status deployment/hello --timeout=60s
+# Waiting for deployment "hello" rollout to finish: 1 out of 3 new replicas have been updated...
+# error: timed out waiting for the condition
+
+oc get pods -l app=hello
+# hello-new-xxxxx   0/1   ImagePullBackOff   0   50s   ← new ReplicaSet
+# hello-old-aaaaa   1/1   Running            0   10m   ← old pods keep serving
+# hello-old-bbbbb   1/1   Running            0   10m
+# hello-old-ccccc   1/1   Running            0   10m
+```
+
+The rolling update protects you: the old pods keep serving because the new ones never become Ready. `curl http://$HOST` still works.
+
+The container name (`hello-openshift`) is required in `oc set image`; find it with `oc get deployment hello -o jsonpath='{.spec.template.spec.containers[*].name}'`.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 2</summary>
+
+```bash
+oc rollout history deployment/hello
+# REVISION  CHANGE-CAUSE
+# 1         <none>
+# 2         <none>
+
+oc rollout undo deployment/hello
+# deployment.apps/hello rolled back
+
+oc rollout status deployment/hello
+oc get deployment hello -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+# quay.io/openshifttest/hello-openshift:1.2.0
+```
+
+To make the history readable, annotate each change:
+
+```bash
+oc annotate deployment/hello kubernetes.io/change-cause="rollback to 1.2.0" --overwrite
+oc rollout history deployment/hello
+```
+
+</details>
+
+<details>
+<summary>💡 Solution Step 3</summary>
+
+```bash
+oc patch deployment hello -p '{"spec":{"replicas":5}}'
+oc get deployment hello
+# NAME    READY   UP-TO-DATE   AVAILABLE
+# hello   5/5     5            5
+```
+
+(`oc scale deployment/hello --replicas=5` is the purpose-built alternative.)
+
+</details>
+
+<details>
+<summary>💡 Solution Step 4</summary>
+
+```bash
+oc label deployment hello tier=frontend
+oc get deployment hello --show-labels
+# ... app=hello,tier=frontend
+```
+
+**Gotcha — this labels the Deployment object only, not its pods.** `oc get pods -l tier=frontend` returns nothing. To label the pods, change the pod template (which triggers a rollout):
+
+```bash
+oc patch deployment hello -p '{"spec":{"template":{"metadata":{"labels":{"tier":"frontend"}}}}}'
+oc get pods -l tier=frontend
+```
+
+Don't add it to `spec.selector` — a Deployment's selector is immutable.
+
+**Remember:** `hello.yaml` still says 3 replicas and has no `tier` label. If you re-apply it, those imperative changes are partly undone. On the exam, the cluster state is what gets graded; in real life, update the file.
+
+Cleanup: `oc delete project lab21`
+
+</details>
+
 ### Lab 2.3 — ConfigMap + Secret end-to-end (25 min)
 
 In project `lab23`:
@@ -367,16 +568,303 @@ In project `lab23`:
 3. Deploy `quay.io/openshifttest/hello-openshift:1.2.0` and use `oc set env` so:
    - The pod has `LOG_LEVEL` and `GREETING` from the CM
    - It has `DB_USERNAME` and `DB_PASSWORD` from the Secret (prefix `DB_`)
-4. `oc rsh` into the pod and `env | grep -E 'LOG_|GREETING|DB_'` to verify.
+4. Verify the four variables are in the running pod (the image has no shell — see the note at the top of the Labs section).
+
+<details>
+<summary>💡 Solution Steps 1–2</summary>
+
+```bash
+oc new-project lab23
+
+oc create configmap appconfig \
+  --from-literal=LOG_LEVEL=debug \
+  --from-literal=GREETING=Hello
+
+oc create secret generic dbcreds \
+  --from-literal=username=app \
+  --from-literal=password=hunter2
+
+oc get cm appconfig -o yaml
+oc get secret dbcreds -o jsonpath='{.data.password}' | base64 -d; echo
+# hunter2
+```
+
+</details>
+
+<details>
+<summary>💡 Solution Step 3</summary>
+
+```bash
+oc create deployment hello --image=quay.io/openshifttest/hello-openshift:1.2.0
+
+oc set env deployment/hello --from=configmap/appconfig
+oc set env deployment/hello --from=secret/dbcreds --prefix=DB_
+```
+
+`--from` creates one env var per key, upper-casing the key: `username` → `USERNAME`, and with `--prefix=DB_` → `DB_USERNAME`.
+
+See what was generated:
+
+```bash
+oc set env deployment/hello --list
+# # deployments/hello, container hello-openshift
+# # LOG_LEVEL from configmap appconfig, key LOG_LEVEL
+# # GREETING from configmap appconfig, key GREETING
+# # DB_USERNAME from secret dbcreds, key username
+# # DB_PASSWORD from secret dbcreds, key password
+```
+
+Under the hood these are `valueFrom.configMapKeyRef` / `secretKeyRef` entries — the YAML form from §3 and §4. The values are read when the pod **starts**, so later edits to the CM/Secret need `oc rollout restart deployment/hello`.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 4</summary>
+
+```bash
+oc rollout status deployment/hello
+
+# Run `env` with the pod's spec but a UBI image that has a shell:
+oc debug deployment/hello --image=registry.access.redhat.com/ubi9/ubi-minimal -- env \
+  | grep -E 'LOG_|GREETING|DB_'
+# LOG_LEVEL=debug
+# GREETING=Hello
+# DB_USERNAME=app
+# DB_PASSWORD=hunter2
+```
+
+Alternative without starting a pod — read the spec:
+
+```bash
+oc get deployment hello -o jsonpath='{range .spec.template.spec.containers[0].env[*]}{.name}{"\n"}{end}'
+```
+
+(For an image that has a shell, `oc exec deploy/hello -- env | grep …` is the direct way.)
+
+Cleanup: `oc delete project lab23`
+
+</details>
 
 ### Lab 2.4 — Kustomize base + 2 overlays (40 min)
 
-1. Build the directory layout above (`base/`, `overlays/dev`, `overlays/prod`).
-2. `base/` contains a Deployment, Service, ConfigMap for the hello app.
-3. `dev` overlay sets replicas=1 and adds label `env: dev`.
-4. `prod` overlay sets replicas=5, adds label `env: prod`, bumps image tag to `1.3.0`, merges `LOG_LEVEL=warn` into the CM, deploys to namespace `hello-prod`.
-5. Apply both. `oc get deploy,svc,cm,po -n hello-prod` and `-n hello-dev`. Confirm differences.
+1. Build the directory layout from §5 (`base/`, `overlays/dev`, `overlays/prod`).
+2. `base/` contains a Deployment and Service for the hello app, plus a generated ConfigMap `appconfig` (`LOG_LEVEL=info`, `GREETING=Hello`) that the Deployment loads with `envFrom`.
+3. `dev` overlay: namespace `hello-dev`, replicas=1, label `env: dev`.
+4. `prod` overlay: namespace `hello-prod`, replicas=5, label `env: prod`, merges `LOG_LEVEL=warn` into the CM, and **pins the image by digest** instead of a tag.
+5. Apply both. `oc get deploy,svc,cm,po -n hello-prod` and `-n hello-dev`. Confirm the differences.
 6. Delete both: `oc delete -k overlays/dev` and `oc delete -k overlays/prod`.
+
+<details>
+<summary>💡 Solution Steps 1–2 — the base</summary>
+
+```bash
+mkdir -p hello/{base,overlays/dev,overlays/prod} && cd hello
+```
+
+`base/deployment.yaml`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  labels:
+    app: hello
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hello
+  template:
+    metadata:
+      labels:
+        app: hello
+    spec:
+      containers:
+        - name: hello
+          image: quay.io/openshifttest/hello-openshift:1.2.0
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: appconfig        # Kustomize rewrites this to the hashed name
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits:   {cpu: 200m, memory: 128Mi}
+```
+
+`base/service.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+  labels:
+    app: hello
+spec:
+  selector:
+    app: hello
+  ports:
+    - port: 8080
+      targetPort: 8080
+```
+
+`base/kustomization.yaml`:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: appconfig
+    literals:
+      - LOG_LEVEL=info
+      - GREETING=Hello
+```
+
+Check the base renders: `oc kustomize base/`
+
+</details>
+
+<details>
+<summary>💡 Solution Step 3 — the dev overlay</summary>
+
+`overlays/dev/kustomization.yaml`:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+namespace: hello-dev
+labels:
+  - pairs:
+      env: dev
+    includeTemplates: true     # pods get the label too; selectors stay untouched
+replicas:
+  - name: hello
+    count: 1
+```
+
+The `replicas:` transformer is the shortest way to change a replica count — no patch file needed.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 4 — the prod overlay</summary>
+
+First get the digest that the `1.2.0` tag points to. The simplest reliable way is to read it from a running pod (deploy dev first — Step 5):
+
+```bash
+oc get pod -n hello-dev -l app=hello \
+  -o jsonpath='{.items[0].status.containerStatuses[0].imageID}{"\n"}'
+# quay.io/openshifttest/hello-openshift@sha256:4f3b…   ← copy the sha256:… part
+```
+
+(`oc image info quay.io/openshifttest/hello-openshift:1.2.0` also shows digests, but for multi-arch images it asks for `--filter-by-os` and then gives the per-architecture digest.)
+
+`overlays/prod/kustomization.yaml`:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+namespace: hello-prod
+labels:
+  - pairs:
+      env: prod
+    includeTemplates: true
+patches:
+  - path: replicas-patch.yaml
+images:
+  - name: quay.io/openshifttest/hello-openshift
+    digest: sha256:<paste-the-digest-here>
+configMapGenerator:
+  - name: appconfig
+    behavior: merge
+    literals:
+      - LOG_LEVEL=warn
+```
+
+`overlays/prod/replicas-patch.yaml` (strategic merge patch — matched to the Deployment by kind + name):
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+spec:
+  replicas: 5
+```
+
+Preview before applying — check the image line, the replica count and the merged CM:
+
+```bash
+oc kustomize overlays/prod | grep -E 'image:|replicas:|LOG_LEVEL|name: appconfig'
+#   LOG_LEVEL: warn
+#   name: appconfig-m87d62t9k4
+#   replicas: 5
+#             name: appconfig-m87d62t9k4
+#         image: quay.io/openshifttest/hello-openshift@sha256:…
+```
+
+**Why a digest:** a tag can be moved to a different image; a digest can't. Pinning prod by digest means it only changes when you change the overlay. (To change the tag instead, use `newTag:`.)
+
+</details>
+
+<details>
+<summary>💡 Solution Step 5 — apply and compare</summary>
+
+`namespace:` doesn't create namespaces, so create them first:
+
+```bash
+oc new-project hello-dev
+oc new-project hello-prod
+
+oc apply -k overlays/dev
+oc apply -k overlays/prod
+
+oc get deploy,svc,cm,po -n hello-dev
+oc get deploy,svc,cm,po -n hello-prod
+```
+
+What to confirm:
+
+| Check | dev | prod |
+|-------|-----|------|
+| `oc get deploy hello -o jsonpath='{.spec.replicas}'` | `1` | `5` |
+| `oc get pods -l env=<env>` | 1 pod | 5 pods |
+| `oc get cm -o name` | `appconfig-<hash1>` | `appconfig-<hash2>` (different hash — different content) |
+| `LOG_LEVEL` in the CM | `info` | `warn` |
+| Image | `…:1.2.0` | `…@sha256:…` |
+
+```bash
+oc get cm -n hello-prod -o yaml | grep LOG_LEVEL
+oc get deploy hello -n hello-prod -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+```
+
+**Try it:** change `LOG_LEVEL=warn` to `LOG_LEVEL=error` in the prod overlay and re-apply. The CM gets a new hash name, the Deployment's reference changes, and the pods roll automatically.
+
+</details>
+
+<details>
+<summary>💡 Solution Step 6 — cleanup</summary>
+
+```bash
+oc delete -k overlays/dev
+oc delete -k overlays/prod
+# deletes exactly what each overlay rendered
+
+oc delete project hello-dev hello-prod
+```
+
+Old generated ConfigMaps (previous hashes) aren't deleted by `oc apply -k`; they're removed here with the namespace, or by hand with `oc delete cm <old-name>`.
+
+</details>
 
 ---
 
@@ -395,13 +883,17 @@ In project `lab23`:
 
 ## 🔗 Docs to bookmark
 
-- Working with manifests: `…/building_applications/working-with-projects`
-- ConfigMaps & Secrets: `…/nodes/pods/nodes-pods-configmaps` and `…/nodes/pods/nodes-pods-secrets`
-- Kustomize in `oc`: `…/cli_tools/openshift-cli-oc/managing-cli-plug-ins` (and the upstream <https://kustomize.io>)
+Swap `4.18` for your exam's version. Guide index pages are the most stable entry points; use the left-hand navigation from there.
+
+- Building applications (Deployments, config maps, secrets): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/building_applications/index>
+- Nodes (pods, config maps & secrets as volumes/env, resource limits): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/nodes/index>
+- CLI tools (`oc` reference, including `oc kustomize` / `oc apply -k`): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/cli_tools/index>
+- Upstream Kustomize reference: <https://kubectl.docs.kubernetes.io/references/kustomize/>
+
 ---
 
 <div align="center">
 
-[⬅️ Prev](../README.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Day 2 ➡️](./day-02-processes-proc-signals.md)
+[⬅️ Prev: Manage OpenShift Container Platform](./01-manage-ocp.md) &nbsp;·&nbsp; [🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Deploy applications ➡️](./03-deploy-applications.md)
 
 </div>
