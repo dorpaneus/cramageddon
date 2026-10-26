@@ -66,11 +66,12 @@ SCC is OpenShift's mechanism to control **what a pod is allowed to do at the hos
 | `anyuid` | Any UID (including 0); drops most caps | Stock community images that hardcode UID 0 |
 | `hostmount-anyuid` | anyuid + host-path mounts | NFS provisioners, etc. |
 | `hostnetwork` | Host network/PID/IPC | Ingress/router-like pods |
-| `hostaccess` | All of the above except privileged | Hyper-converged storage |
-| `nonroot-v2` | Any non-root UID | Modern non-root containers (default in 4.18) |
-| `nonroot` | Like nonroot-v2 but older API | Legacy |
-| `restricted-v2` (default) | Random UID, no caps, no root | All standard workloads (default for `system:authenticated`) |
-| `restricted` | Older variant of restricted-v2 | Legacy compatibility |
+| `hostnetwork-v2` | Like `hostnetwork`, with the `-v2` defaults (drops ALL capabilities, no privilege escalation) | Preferred over `hostnetwork` |
+| `hostaccess` | Host network/PID/IPC + host paths, but not privileged | Rare; host-level agents |
+| `nonroot-v2` | Any **non-root** UID the image/pod asks for | Image needs a specific non-root UID |
+| `nonroot` | Like `nonroot-v2` without the `-v2` defaults | Legacy |
+| `restricted-v2` (**default**) | Random UID from the namespace range, drops ALL capabilities (may add `NET_BIND_SERVICE`), no privilege escalation, seccomp `RuntimeDefault` | All standard workloads (available to every authenticated user) |
+| `restricted` | Older variant of `restricted-v2` | Legacy compatibility (not granted by default on new clusters) |
 
 ### List and inspect
 
@@ -91,8 +92,8 @@ Wrong way: editing the SCC's `users:` list (works but doesn't scale).
 # Grant "use" permission on a single SCC to a Service Account
 oc adm policy add-scc-to-user anyuid -z mysa -n myapp
 
-# Same thing via a Role you can audit
-# (oc adm policy actually creates a Role/RB for you under the hood in 4.18)
+# Under the hood this is plain RBAC: a binding to the ClusterRole
+# system:openshift:scc:anyuid, which grants the "use" verb on that SCC.
 
 # Remove
 oc adm policy remove-scc-from-user anyuid -z mysa -n myapp
@@ -103,43 +104,38 @@ oc adm policy remove-scc-from-user anyuid -z mysa -n myapp
 ```bash
 oc new-project sccdemo
 
-# This image runs as root (UID 0). On restricted-v2 it gets killed.
-oc new-app --name=mongo --image=docker.io/bitnami/mongodb:6.0
+# The official nginx image expects to start as root. On restricted-v2 it crashes.
+oc new-app --name=nginx --image=docker.io/library/nginx:1.27
 
-oc get pods                  # CrashLoopBackOff
-oc logs <pod>                # "could not chmod ... permission denied"
+oc get pods                         # CrashLoopBackOff
+oc logs deploy/nginx --previous     # mkdir() "/var/cache/nginx/client_temp" failed (13: Permission denied)
 
 # Fix: dedicated SA + anyuid SCC
-oc create sa mongo-sa
-oc adm policy add-scc-to-user anyuid -z mongo-sa
-oc set serviceaccount deployment/mongo mongo-sa
-oc rollout status deploy/mongo
+oc create sa nginx-sa
+oc adm policy add-scc-to-user anyuid -z nginx-sa
+oc set serviceaccount deployment/nginx nginx-sa
+oc rollout status deploy/nginx
 ```
 
-### Pod Security Admission (PSA) in 4.18
+### Pod Security Admission (PSA) alongside SCCs
 
-In OCP 4.18, the **PodSecurityAdmission** (Kubernetes-native) layer is enforced **alongside** SCCs. Each namespace carries labels:
+Kubernetes' **Pod Security Admission** also runs on OpenShift, but the **SCC is the gate that decides** whether a pod runs:
 
-```yaml
-metadata:
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
-```
+- Cluster-wide PSA **enforcement is `privileged`** by default (nothing is rejected by PSA), while `warn` and `audit` default to `restricted`.
+- OpenShift's **label syncer** sets each user namespace's `pod-security.kubernetes.io/warn` and `audit` labels to match the most privileged SCC that the namespace's **service accounts** can use. Grant `anyuid` to an SA and the labels relax automatically. (Namespaces named `openshift-*` aren't synced; opt a namespace out with the label `security.openshift.io/scc.podSecurityLabelSync=false`.)
+- So `Warning: would violate PodSecurity "restricted:latest"` messages are usually **just warnings**.
 
-If you give an SA the `anyuid` SCC but the namespace's PSA enforce label is `restricted`, the pod is **still rejected**. Two fixes:
+You only need to touch PSA labels when a namespace carries an explicit, stricter `enforce` label (set by an admin, or enforced by your cluster version):
 
 ```bash
-# Option 1: relax the namespace
-oc label ns sccdemo pod-security.kubernetes.io/enforce=privileged --overwrite
-oc label ns sccdemo pod-security.kubernetes.io/warn=privileged --overwrite
-oc label ns sccdemo pod-security.kubernetes.io/audit=privileged --overwrite
+# Check
+oc get ns sccdemo --show-labels | tr ',' '\n' | grep pod-security
 
-# Option 2: set a less restrictive global default via the Authentication operator (less common)
+# Relax enforcement for that namespace (baseline allows root; privileged allows host access)
+oc label ns sccdemo pod-security.kubernetes.io/enforce=baseline --overwrite
 ```
 
-Always check both layers on exam: SCC + PSA.
+Always check both layers when a pod won't start: the SCC (`openshift.io/scc` annotation, SA bindings) **and** any `enforce` label.
 
 ## §3 — Privileged workloads
 
@@ -165,9 +161,14 @@ Then:
 ```bash
 oc create sa priv-sa
 oc adm policy add-scc-to-user privileged -z priv-sa
-oc label ns <ns> pod-security.kubernetes.io/enforce=privileged --overwrite
 oc apply -f priv-pod.yaml
+oc get pod priv-pod -o jsonpath='{.metadata.annotations.openshift\.io/scc}{"\n"}'   # privileged
+
+# Only if the namespace has a stricter explicit enforce label:
+# oc label ns <ns> pod-security.kubernetes.io/enforce=privileged --overwrite
 ```
+
+> ℹ️ A **bare pod** (not created by a Deployment/Job) is admitted using the SCCs of the **user who creates it** as well as its SA. As cluster-admin you can use every SCC, so this pod would be admitted even without the SA binding. The SA binding is what matters for Deployments and for non-admin users — always set it up.
 
 > 🛑 **Never give `privileged` SCC to the `default` SA in a namespace** — that effectively makes every pod privileged. Always create a purpose-built SA.
 
@@ -286,7 +287,8 @@ oc logs job/nightly-backup-28543210
 ### Imperative
 
 ```bash
-oc create cronjob ping --image=busybox --schedule="*/5 * * * *" -- ping -c 4 redhat.com
+oc create cronjob hello-cron --image=registry.access.redhat.com/ubi9/ubi-minimal \
+  --schedule="*/5 * * * *" -- /bin/sh -c 'date; echo hello from cron'
 ```
 
 ### Test a CronJob right now without waiting for the schedule
@@ -306,29 +308,30 @@ The single most common security task on the exam: an app crashes because its con
 **Prerequisites:**
 - Cluster-admin (needed to grant SCCs).
 - Project: `oc new-project lab91`.
+- Pull access to Docker Hub (`docker.io`). Anonymous pulls are rate-limited; if you hit `toomanyrequests`, wait or add a Docker Hub pull secret.
 
 ---
 
-#### Step 1 — Deploy MongoDB and confirm it crashes
+#### Step 1 — Deploy the official nginx image and confirm it crashes
 
 <details>
 <summary>💡 Solution</summary>
 
 ```bash
 oc project lab91
-oc new-app --image=docker.io/bitnami/mongodb:6.0 --name=mongo
+oc new-app --image=docker.io/library/nginx:1.27 --name=nginx
 # --> Creating resources ...
-#     deployment.apps "mongo" created
-#     service "mongo" created
+#     deployment.apps "nginx" created
+#     service "nginx" created
 
 oc get pods -w
 # NAME                     READY   STATUS             RESTARTS      AGE
-# mongo-xxxxxxxxx-yyyyy    0/1     CrashLoopBackOff   3 (30s ago)   90s
+# nginx-xxxxxxxxx-yyyyy    0/1     CrashLoopBackOff   3 (30s ago)   90s
 ```
 
 `CrashLoopBackOff` — the container starts, fails immediately, and the kubelet keeps restarting it with exponential backoff.
 
-**Why bitnami/mongodb specifically:** the bitnami image expects to run as a specific non-root UID and write to directories it owns. Under OpenShift's default `restricted-v2` SCC, the container is assigned a random high UID from the namespace's allocated range, which the image's files/dirs aren't owned by — so it can't write and dies.
+**Why this image:** the official nginx image is built to start as **root**: it rewrites files under `/etc/nginx/conf.d`, creates cache directories under `/var/cache/nginx`, then drops to the `nginx` user and listens on port 80. Under OpenShift's default `restricted-v2` SCC the container instead runs as a random high UID from the namespace's range, which owns none of those paths — so it can't write and dies.
 
 </details>
 
@@ -340,33 +343,42 @@ oc get pods -w
 <summary>💡 Solution</summary>
 
 ```bash
-# Current container may be in backoff; use --previous to see the crashed instance's output
-oc logs deploy/mongo
-oc logs -p $(oc get pod -l deployment=mongo -o name | head -1)
+# The current container may be in backoff; --previous shows the crashed instance's output
+oc logs deploy/nginx --previous
 ```
 
 Expect something like:
 
-```
-mkdir: cannot create directory '/bitnami/mongodb': Permission denied
+```text
+/docker-entrypoint.sh: ... can not modify /etc/nginx/conf.d/default.conf (read-only file system?)
 ...
-chown: changing ownership of '/bitnami/mongodb': Operation not permitted
+nginx: [warn] the "user" directive makes sense only if the master process runs with super-user privileges, ignored ...
+nginx: [emerg] mkdir() "/var/cache/nginx/client_temp" failed (13: Permission denied)
 ```
 
 **Confirm it's an SCC/UID problem, not something else:**
 
 ```bash
 # What SCC did the pod get admitted under?
-oc get pod -l deployment=mongo \
+oc get pod -l deployment=nginx \
   -o jsonpath='{.items[0].metadata.annotations.openshift\.io/scc}{"\n"}'
 # restricted-v2
 
 # What UID is the container forced to run as?
-oc get pod -l deployment=mongo \
-  -o jsonpath='{.items[0].spec.containers[0].securityContext}{"\n"}'
+oc get pod -l deployment=nginx \
+  -o jsonpath='{.items[0].spec.containers[0].securityContext.runAsUser}{"\n"}'
+# 1000680000   (or similar — from the namespace's openshift.io/sa.scc.uid-range)
 ```
 
-The `openshift.io/scc: restricted-v2` annotation plus permission-denied errors on file ownership is the classic signature of "this image needs a fixed UID / anyuid".
+The `openshift.io/scc: restricted-v2` annotation plus `Permission denied` on paths the image expects to own is the classic signature of "this image needs to run as its own UID (here root) → `anyuid`".
+
+**Shortcut on 4.x:** `oc adm policy scc-subject-review` asks the cluster which SCC a pod spec *could* be admitted under:
+
+```bash
+oc get deployment nginx -o yaml | oc adm policy scc-subject-review -f -
+# RESOURCE           ALLOWED BY
+# Deployment/nginx   restricted-v2
+```
 
 </details>
 
@@ -379,89 +391,76 @@ The `openshift.io/scc: restricted-v2` annotation plus permission-denied errors o
 
 ```bash
 # 1. Create a dedicated ServiceAccount
-oc create serviceaccount mongo-sa -n lab91
+oc create serviceaccount nginx-sa -n lab91
 
 # 2. Grant it the anyuid SCC (lets the container run as the UID baked into the image)
-oc adm policy add-scc-to-user anyuid -z mongo-sa -n lab91
-# clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "mongo-sa"
+oc adm policy add-scc-to-user anyuid -z nginx-sa -n lab91
+# clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "nginx-sa"
 ```
 
-**The `-z` flag means "ServiceAccount"** (as opposed to a regular user). Always use `-z` when binding an SCC to a SA. Writing `add-scc-to-user anyuid mongo-sa` (without `-z`) would try to bind to a *user* named mongo-sa, which won't help the pod.
+**The `-z` flag means "ServiceAccount"** (as opposed to a regular user). Always use `-z` when binding an SCC to an SA. Writing `add-scc-to-user anyuid nginx-sa` (without `-z`) would bind to a *user* named `nginx-sa`, which won't help the pod.
 
 **Choosing the RIGHT SCC — least privilege matters on the exam:**
 
 | SCC | Grants | Use when |
 |-----|--------|----------|
-| `restricted-v2` | Default. Random UID, no privileged, drops caps. | Well-behaved images |
-| `nonroot-v2` | Any non-root UID the image requests (not random) | Image needs a *specific* non-root UID |
-| `anyuid` | Any UID including a fixed one; still no host access | Image needs a fixed UID like 0-not-required but pinned (most "won't start" images) |
-| `hostmount-anyuid` | anyuid + host path mounts | Backup/storage agents |
+| `restricted-v2` | Default. Random UID from the namespace range, no privilege escalation, drops all capabilities except `NET_BIND_SERVICE`. | Well-behaved images |
+| `nonroot-v2` | Any **non-root** UID the image or pod spec asks for (not random) | Image needs a *specific* non-root UID |
+| `anyuid` | Any UID **including root (0)**; still no host access, no privileged mode | Image needs to run as root or as a fixed UID — like official nginx |
+| `hostmount-anyuid` | `anyuid` + host path mounts | Backup/storage agents |
 | `hostnetwork-v2` | Host networking + host ports | Ingress-like workloads |
-| `privileged` | Everything. Root, host, all caps. | Last resort only |
+| `privileged` | Everything. Root, host namespaces, all capabilities, privileged containers. | Last resort only |
 
-For bitnami/mongodb, `anyuid` is correct. `privileged` would also work but is over-granting — the exam penalizes using a bigger hammer than needed.
+For official nginx, `anyuid` is correct: it needs root, and `nonroot-v2` forbids UID 0. `privileged` would also work but over-grants — the exam penalizes using a bigger hammer than needed.
 
-**Verify what a SA is allowed:**
+**Verify what the SA is allowed:**
 
 ```bash
-oc adm policy who-can use scc anyuid -n lab91
-# or list SCCs a SA can use:
-oc get rolebinding,clusterrolebinding -A -o wide 2>/dev/null | grep mongo-sa
+oc adm policy who-can use scc anyuid -n lab91 | grep nginx-sa
+# or find the binding the command created:
+oc get rolebinding,clusterrolebinding -A -o wide 2>/dev/null | grep nginx-sa
 ```
 
 </details>
 
 ---
 
-#### Step 4 — Patch the Deployment to use the SA (and fix PSA labels if needed)
+#### Step 4 — Point the Deployment at the SA
 
 <details>
 <summary>💡 Solution</summary>
 
 ```bash
-# Point the Deployment's pod template at the new ServiceAccount
-oc set serviceaccount deployment/mongo mongo-sa -n lab91
-# deployment.apps/mongo serviceaccount updated
+oc set serviceaccount deployment/nginx nginx-sa -n lab91
+# deployment.apps/nginx serviceaccount updated
 
 # (Equivalent patch form:)
-# oc patch deployment mongo -n lab91 --type=merge \
-#   -p '{"spec":{"template":{"spec":{"serviceAccountName":"mongo-sa"}}}}'
+# oc patch deployment nginx -n lab91 --type=merge \
+#   -p '{"spec":{"template":{"spec":{"serviceAccountName":"nginx-sa"}}}}'
 ```
 
 This triggers a new rollout. Watch:
 
 ```bash
-oc rollout status deployment/mongo -n lab91
+oc rollout status deployment/nginx -n lab91
 oc get pods -w
 ```
 
-**PSA gotcha — SCC alone may not be enough in 4.18.** Pod Security Admission runs as a *separate* gate in front of SCC. If the namespace enforces `restricted` PSA, a pod requesting a fixed/root UID can be rejected at admission *before* the SCC ever mutates it. Symptoms: the Deployment shows a warning and pods never get created, with a message like:
+**Why the SA and not the deployment itself:** SCCs are granted to *who runs the pod*, and pods run as their ServiceAccount. The SCC admission controller picks, from all SCCs the SA (or the requesting user) may use, the most restrictive one that lets the pod spec run — here `anyuid`.
 
-```
-Warning  FailedCreate  ...  Error creating: pods "mongo-..." is forbidden:
-violates PodSecurity "restricted:v1.24": ...
-```
-
-If you hit that, relax the namespace's PSA enforce level:
+**About Pod Security Admission (PSA) warnings:** you may see `Warning: would violate PodSecurity "restricted:latest": ...` when the pod is created. On OpenShift that's usually just a **warning**: cluster-wide enforcement is `privileged` by default, and OpenShift's label syncer automatically relaxes the namespace's `warn`/`audit` labels to match the SCCs its service accounts can use. Pods are only *rejected* if the namespace carries an explicit `pod-security.kubernetes.io/enforce` label that's stricter than the pod — check with:
 
 ```bash
-# Check current PSA labels
-oc get ns lab91 -o jsonpath='{.metadata.labels}{"\n"}' | tr ',' '\n' | grep pod-security
-
-# Relax enforcement to privileged (baseline may suffice depending on the image)
-oc label namespace lab91 \
-  pod-security.kubernetes.io/enforce=privileged \
-  pod-security.kubernetes.io/enforce-version=latest --overwrite
+oc get ns lab91 --show-labels | tr ',' '\n' | grep pod-security
 ```
 
-**Key mental model:** two independent gates, both must pass.
+If an `enforce=restricted` label is present (someone set it, or your cluster version enforces it), the ReplicaSet shows `FailedCreate ... violates PodSecurity`, and you'd relax that namespace:
 
-```
-Pod admission → [ Pod Security Admission ] → [ SCC ] → Pod runs
-                  (namespace labels)          (SA's granted SCC)
+```bash
+oc label namespace lab91 pod-security.kubernetes.io/enforce=baseline --overwrite
 ```
 
-Granting `anyuid` via SCC fixes the SCC gate. Labeling the namespace fixes the PSA gate. A "won't start" image sometimes needs both.
+(`baseline` allows running as root; `privileged` is only needed for host access or privileged containers.)
 
 </details>
 
@@ -473,32 +472,40 @@ Granting `anyuid` via SCC fixes the SCC gate. Labeling the namespace fixes the P
 <summary>💡 Solution</summary>
 
 ```bash
-oc get pods -l deployment=mongo -n lab91
+oc get pods -l deployment=nginx -n lab91
 # NAME                     READY   STATUS    RESTARTS   AGE
-# mongo-zzzzzzzzz-wwwww    1/1     Running   0          40s
+# nginx-zzzzzzzzz-wwwww    1/1     Running   0          40s
 
 # Confirm which SCC admitted it (should now be anyuid)
-oc get pod -l deployment=mongo -n lab91 \
+oc get pod -l deployment=nginx -n lab91 \
   -o jsonpath='{.items[0].metadata.annotations.openshift\.io/scc}{"\n"}'
 # anyuid
 
 # Confirm the pod is using the right ServiceAccount
-oc get pod -l deployment=mongo -n lab91 \
+oc get pod -l deployment=nginx -n lab91 \
   -o jsonpath='{.items[0].spec.serviceAccountName}{"\n"}'
-# mongo-sa
+# nginx-sa
 
 # Logs should now show a healthy startup
-oc logs deploy/mongo -n lab91 | tail
-# ... "Waiting for connections" on port 27017
+oc logs deploy/nginx -n lab91 | tail -3
+# ... Configuration complete; ready for start up
+# ... start worker processes
+
+# And it serves traffic
+oc expose service nginx -n lab91
+curl -s http://$(oc get route nginx -n lab91 -o jsonpath='{.spec.host}') | grep -o '<title>.*</title>'
+# <title>Welcome to nginx!</title>
 ```
 
 **Verification checklist for the rescue:**
 
 ```bash
-oc get sa mongo-sa -n lab91                                                    # SA exists
-oc get pod -l deployment=mongo -n lab91 -o jsonpath='{.items[0].metadata.annotations.openshift\.io/scc}'   # anyuid
-oc get pod -l deployment=mongo -n lab91 -o jsonpath='{.items[0].status.phase}' # Running
+oc get sa nginx-sa -n lab91                                                    # SA exists
+oc get pod -l deployment=nginx -n lab91 -o jsonpath='{.items[0].metadata.annotations.openshift\.io/scc}'   # anyuid
+oc get pod -l deployment=nginx -n lab91 -o jsonpath='{.items[0].status.phase}' # Running
 ```
+
+**The alternative fix (better when you control the image):** use an image built to run as any UID, such as `docker.io/nginxinc/nginx-unprivileged` or a Red Hat UBI image. Then no SCC change is needed at all. On the exam, do what the task asks — usually "make it run without changing the image", which means the SA + SCC route above.
 
 **Cleanup:**
 
@@ -666,7 +673,7 @@ oc exec -n lab92 $POD -- sh -c '
 <summary>💡 Solution</summary>
 
 ```bash
-oc exec -n lab92 $POD -- oc create deployment nope --image=bitnami/nginx:latest
+oc exec -n lab92 $POD -- oc create deployment nope --image=quay.io/openshifttest/hello-openshift:1.2.0
 # Error from server (Forbidden): deployments.apps is forbidden:
 # User "system:serviceaccount:lab92:viewer-sa" cannot create resource "deployments"
 # in API group "apps" in the namespace "lab92"
@@ -708,9 +715,13 @@ oc get secret viewer-sa-token -n lab92 -o jsonpath='{.data.token}' | base64 -d
 **Cleanup:**
 
 ```bash
+# Remove the cluster-wide grant FIRST — deleting the project does not delete
+# the ClusterRoleBinding (it's cluster-scoped):
+oc adm policy remove-cluster-role-from-user view -z viewer-sa -n lab92
 oc delete project lab92
-oc delete clusterrolebinding -l '' 2>/dev/null   # (the CRB from add-cluster-role-to-user is auto-named; find it if you want to purge)
-oc get clusterrolebinding | grep viewer-sa       # then oc delete clusterrolebinding <name>
+
+# Check nothing is left behind:
+oc get clusterrolebinding -o wide | grep viewer-sa     # (no output)
 ```
 
 </details>
@@ -1043,7 +1054,7 @@ oc patch cronjob overlapper -n lab94 \
 oc get jobs -n lab94 -w
 ```
 
-Now when the next minute ticks while a Job is still in its 90s sleep, OLM **deletes the running Job** (and its pod) and creates a new one:
+Now when the next minute ticks while a Job is still in its 90s sleep, the CronJob controller **deletes the running Job** (and its pod) and creates a new one:
 
 ```bash
 oc describe cronjob overlapper -n lab94 | tail -15
@@ -1127,7 +1138,7 @@ oc delete project lab94
 
 ## ❗ Common pitfalls
 
-1. **Forgetting PSA**: SCC alone isn't enough on 4.18; check the namespace's `pod-security.kubernetes.io/enforce` label.
+1. **Blaming PSA warnings**: on OpenShift the SCC is what usually decides; PSA only rejects pods if the namespace has a stricter explicit `pod-security.kubernetes.io/enforce` label. Check `oc get ns <ns> --show-labels`.
 2. **Granting SCC to a user instead of an SA**: pods don't run as users — they run as SAs.
 3. **`oc adm policy add-scc-to-user privileged -z default` is dangerous** — every pod in the namespace becomes privileged. Always use a dedicated SA.
 4. **Job pods stick around** unless you set `ttlSecondsAfterFinished` — clutters the namespace.
@@ -1136,7 +1147,7 @@ oc delete project lab94
 
 ## 🔗 Docs to bookmark
 
-- ServiceAccounts: https://docs.openshift.com/container-platform/4.18/authentication_and_authorization/understanding-and-creating-service-accounts.html
-- SCCs: https://docs.openshift.com/container-platform/4.18/authentication_and_authorization/managing-pod-security-policies.html
-- Pod Security Admission: https://docs.openshift.com/container-platform/4.18/authentication_and_authorization/understanding-and-managing-pod-security-admission.html
-- Jobs & CronJobs: https://docs.openshift.com/container-platform/4.18/nodes/jobs/nodes-nodes-jobs.html
+Swap `4.18` for your exam's version. If a page 404s, open the guide's `index` page and use the left-hand navigation.
+
+- Authentication and authorization (service accounts, **Managing security context constraints**, **Understanding and managing pod security admission**): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/authentication_and_authorization/index>
+- Nodes (Jobs, CronJobs, pods): <https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/nodes/index>
