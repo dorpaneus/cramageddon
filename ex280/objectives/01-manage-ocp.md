@@ -11,11 +11,12 @@
 > - Examine resources and cluster status
 > - Monitor cluster events and alerts
 > - View logs
+> - Assess the health of an OpenShift cluster
 > - Troubleshoot common container, pod, and cluster events and alerts
 > - Use product documentation
 > - Be prepared to perform all tasks of a Red Hat Certified Technologist in OpenShift
 
-Plus, in 4.18: **be comfortable with cluster updates** (channel selection, EUS-to-EUS, MCP pausing).
+Also covered (DO280 course content, **not** an EX280 objective): cluster updates — channel selection, EUS-to-EUS, MCP pausing. See §9 and Lab 1.6.
 
 ## §1 - `oc` and the web console
 
@@ -298,7 +299,7 @@ data:
     enableUserWorkload: true
 ```
 
-## §9 - OpenShift cluster updates (new emphasis in 4.18 / DO280 v4.18)
+## §9 - OpenShift cluster updates (DO280 course content, not an EX280 objective)
 
 ```bash
 # Available updates on the current channel
@@ -328,7 +329,7 @@ oc patch machineconfigpool worker --type=merge -p '{"spec":{"paused":false}}'
 
 This lab walks through the four moments in a project's life: create, inspect, populate, delete. Each step has a collapsible Solution.
 
-Prerequisites: logged in as cluster-admin (or any user with self-provisioner). `oc` CLI version close to 4.18.
+**Prerequisites:** logged in as cluster-admin (or any user with `self-provisioner`). `oc` CLI version close to your cluster's.
 
 1. Create a project `lab11`.
 2. Show its annotations: `oc get project lab11 -o yaml` - note `openshift.io/requester`.
@@ -337,32 +338,39 @@ Prerequisites: logged in as cluster-admin (or any user with self-provisioner). `
 
 <details>
 <summary>💡 Solution Step 1</summary>
-bashoc new-project lab11
-# Now using project "lab11" on server "https://api.<cluster>:6443".
 
-oc new-project is the user-facing command — it creates the project AND switches your context to it.
+```bash
+oc new-project lab11
+# Now using project "lab11" on server "https://api.<cluster>:6443".
+```
+
+`oc new-project` is the user-facing command — it creates the project **and** switches your context to it.
 
 Alternative (cluster-admin only):
 
-bashoc create namespace lab11
+```bash
+oc create namespace lab11
 oc project lab11
+```
 
-The two are not equivalent in OpenShift:
+The two are **not** equivalent in OpenShift:
 
-
-oc new-project goes through the project request API, applies the project template (if one is configured), and sets openshift.io/requester to your username.
-oc create namespace bypasses that — no requester annotation, no template processing.
-
+- `oc new-project` goes through the project request API, applies the project template (if one is configured), and sets `openshift.io/requester` to your username.
+- `oc create namespace` bypasses that — no requester annotation, no template processing.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 2 </summary>
-bashoc get project lab11 -o yaml
+<summary>💡 Solution Step 2</summary>
 
-Look in the metadata.annotations block. Key entries to recognize:
+```bash
+oc get project lab11 -o yaml
+```
 
-yamlmetadata:
+Look in the `metadata.annotations` block. Key entries to recognize:
+
+```yaml
+metadata:
   annotations:
     openshift.io/description: ""
     openshift.io/display-name: ""
@@ -370,50 +378,64 @@ yamlmetadata:
     openshift.io/sa.scc.mcs: s0:c26,c10      # SCC MCS labels
     openshift.io/sa.scc.supplemental-groups: 1000680000/10000
     openshift.io/sa.scc.uid-range: 1000680000/10000
+```
 
 Direct extract via jsonpath:
 
-bashoc get project lab11 -o jsonpath='{.metadata.annotations.openshift\.io/requester}{"\n"}'
+```bash
+oc get project lab11 -o jsonpath='{.metadata.annotations.openshift\.io/requester}{"\n"}'
 # kubeadmin
+```
 
-(Note the \. to escape the dot inside the annotation key.)
+(Note the `\.` to escape the dot inside the annotation key.)
 
-Why this matters: openshift.io/requester drives the annotationSelector mode of ClusterResourceQuota — you can build "per-developer quota" rules that auto-attach to every project a given user creates.
+**Why this matters:** `openshift.io/requester` drives the annotation-selector mode of `ClusterResourceQuota` — you can build "per-developer quota" rules that automatically apply to every project a given user creates.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 3 </summary>
-You're already inside lab11 after Step 1. If not:
+<summary>💡 Solution Step 3</summary>
 
-bashoc project lab11
+You're already inside `lab11` after Step 1. If not:
+
+```bash
+oc project lab11
+```
 
 Create the pod (simplest form):
 
-bashoc run hello --image=quay.io/openshifttest/hello-openshift:1.2.0
+```bash
+oc run hello --image=quay.io/openshifttest/hello-openshift:1.2.0
 # pod/hello created
+```
 
 Verify:
 
-bashoc get pod hello -w
+```bash
+oc get pod hello -w
 # hello   0/1   ContainerCreating   0   3s
 # hello   1/1   Running             0   12s
 
 oc logs hello
 # serving on 8080
 # serving on 8888
+```
 
-Gotcha — oc run creates a bare Pod, not a Deployment. A bare Pod isn't restarted by a controller if the node fails. On the exam, prefer:
+**Gotcha — `oc run` creates a bare Pod, not a Deployment.** A bare Pod isn't recreated by a controller if it's deleted or its node fails. On the exam, prefer:
 
-bashoc create deployment hello --image=quay.io/openshifttest/hello-openshift:1.2.0
+```bash
+oc create deployment hello --image=quay.io/openshifttest/hello-openshift:1.2.0
+```
 
 unless the task explicitly asks for a Pod.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 4 </summary>
-bashoc delete project lab11
+<summary>💡 Solution Step 4</summary>
+
+```bash
+oc delete project lab11
 # project.project.openshift.io "lab11" deleted
 
 # Watch the status until the project disappears entirely:
@@ -422,32 +444,42 @@ oc get project lab11 -w
 # lab11                  Terminating
 # (... typically 5–20 seconds ...)
 # Error from server (NotFound): namespaces "lab11" not found
+```
 
 Alternative — block until deleted (cleaner in scripts):
 
-bashoc delete project lab11 --wait=true
+```bash
+oc delete project lab11 --wait=true
+# or, after a plain delete:
+oc wait --for=delete namespace/lab11 --timeout=60s
+```
 
-If the project hangs in Terminating forever: there's a stuck finalizer, usually on a custom resource managed by an operator that's no longer running. To diagnose:
+**If the project hangs in `Terminating` forever:** there's a stuck finalizer, usually on a custom resource managed by an operator that's no longer running. To diagnose:
 
-bashoc get project lab11 -o json | jq '.spec.finalizers, .metadata.finalizers'
+```bash
+oc get namespace lab11 -o jsonpath='{.status.conditions}{"\n"}'   # names the blocking resources
 oc get all,pvc,configmap,secret,role,rolebinding -n lab11
+```
 
 Force-removal (use carefully — last resort):
 
-bashoc get project lab11 -o json \
-  | jq '.spec.finalizers = [] | .metadata.finalizers = []' \
+```bash
+oc get namespace lab11 -o json \
+  | jq '.spec.finalizers = []' \
   | oc replace --raw "/api/v1/namespaces/lab11/finalize" -f -
+```
 
 On the exam, projects normally terminate in seconds. If yours doesn't, suspect a misconfigured operator.
 
 </details>
-   
+
 ---
+
 ### Lab 1.2 - Querying & filtering (15 min)
 
-All four steps target the openshift-monitoring namespace (which always has a healthy set of pods on a real cluster). This lab is muscle memory for the exam - you'll do oc get -o jsonpath and custom-columns repeatedly.
+All four steps target the `openshift-monitoring` namespace, which always has a healthy set of pods on a real cluster. This lab is muscle memory for the exam — you'll use `-o jsonpath` and `custom-columns` constantly.
 
-Prerequisites: read access to openshift-monitoring (cluster-admin or cluster-reader works).
+**Prerequisites:** read access to `openshift-monitoring` (cluster-admin or cluster-reader works).
 
 In `openshift-monitoring`:
 
@@ -457,70 +489,93 @@ In `openshift-monitoring`:
 4. Get the image of the first container of each prometheus pod (jsonpath).
 
 <details>
-<summary>💡Solution Step 1 </summary>
-bashoc get pods -n openshift-monitoring --sort-by=.status.startTime
+<summary>💡 Solution Step 1</summary>
+
+```bash
+oc get pods -n openshift-monitoring --sort-by=.status.startTime
+```
 
 Newest pods are at the bottom. To reverse:
 
-bashoc get pods -n openshift-monitoring --sort-by=.status.startTime | tac
+```bash
+oc get pods -n openshift-monitoring --sort-by=.status.startTime --no-headers | tac
+```
 
 Alternative sort keys you'll want to know:
 
-bashoc get pods -n openshift-monitoring --sort-by=.metadata.creationTimestamp
+```bash
+oc get pods -n openshift-monitoring --sort-by=.metadata.creationTimestamp
 oc get pods -n openshift-monitoring --sort-by=.status.phase
-oc get pods -A --sort-by='.status.containerStatuses[0].restartCount'    # restart troublemakers
+oc get pods -A --sort-by='.status.containerStatuses[0].restartCount'    # restart troublemakers at the bottom
+```
 
-Gotcha — --sort-by requires a single JSONPath expression, not the templated {...} form. Don't write --sort-by='{.status.startTime}'.
+**Gotcha — `--sort-by` takes a single JSONPath expression**, not the templated `{...}` form. Don't write `--sort-by='{.status.startTime}'`.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 2 </summary>
-bashoc get pods -n openshift-monitoring \
+<summary>💡 Solution Step 2</summary>
+
+```bash
+oc get pods -n openshift-monitoring \
   -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName
+```
 
 Output:
 
+```text
 NAME                                          NODE
 alertmanager-main-0                           worker-0
 prometheus-k8s-0                              worker-1
 prometheus-k8s-1                              worker-2
 ...
+```
 
 Variants worth knowing:
 
-bash# Skip the header (useful in scripts):
+```bash
+# Skip the header (useful in scripts):
 oc get pods -n openshift-monitoring \
   -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName --no-headers
 
 # Save the columns spec to a file and reuse:
 cat > cols.txt <<EOF
-NAME      .metadata.name
-NODE      .spec.nodeName
-STATUS    .status.phase
+NAME      NODE           STATUS
+.metadata.name .spec.nodeName .status.phase
 EOF
 oc get pods -n openshift-monitoring -o custom-columns-file=cols.txt
+```
 
-Gotcha — array indexing in custom columns: for containers[0].image use brackets, not dots:
+(The columns file is two lines: headers on the first, matching field paths on the second.)
 
-bashoc get pods -n openshift-monitoring \
-  -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[0].image
+**Gotcha — array indexing in custom columns:** for `containers[0].image` use brackets, not dots:
+
+```bash
+oc get pods -n openshift-monitoring \
+  -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image'
+```
 
 </details>
 
 <details>
-<summary>💡 Solution Step 3 </summary>
-bashoc get pods -n openshift-monitoring -l app.kubernetes.io/component=prometheus
+<summary>💡 Solution Step 3</summary>
+
+```bash
+oc get pods -n openshift-monitoring -l app.kubernetes.io/component=prometheus
+```
 
 Output (typical):
 
+```text
 NAME                READY   STATUS    RESTARTS   AGE
 prometheus-k8s-0    6/6     Running   0          2d
 prometheus-k8s-1    6/6     Running   0          2d
+```
 
 Other selector forms to memorize:
 
-bash# Two labels (AND)
+```bash
+# Two labels (AND)
 oc get pods -n openshift-monitoring \
   -l app.kubernetes.io/component=prometheus,app.kubernetes.io/instance=k8s
 
@@ -534,34 +589,49 @@ oc get pods -n openshift-monitoring -l 'app.kubernetes.io/component!=alertmanage
 oc get pods -n openshift-monitoring \
   -l 'app.kubernetes.io/component in (prometheus,alertmanager)'
 
-# Negate a label (NOT present)
+# Label NOT present
 oc get pods -n openshift-monitoring -l '!app.kubernetes.io/component'
+```
 
-Field selectors (different mechanism, not labels — for status, phase, nodename):
+Field selectors are a different mechanism (not labels) — for status, phase, node name:
 
-bashoc get pods -A --field-selector=status.phase=Running
+```bash
+oc get pods -A --field-selector=status.phase=Running
 oc get pods -A --field-selector=spec.nodeName=worker-0
+```
 
 </details>
 
 <details>
-<summary>💡 Solution Step 4 </summary>
-bashoc get pods -n openshift-monitoring \
+<summary>💡 Solution Step 4</summary>
+
+```bash
+oc get pods -n openshift-monitoring \
   -l app.kubernetes.io/component=prometheus \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+```
 
 Output:
 
+```text
 prometheus-k8s-0   quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:...
 prometheus-k8s-1   quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:...
+```
 
 Anatomy of the jsonpath expression:
 
-FragmentMeaning{range .items[*]} … {end}iterate over each item in the list{.metadata.name}print the pod's name{"\t"}literal tab{.spec.containers[0].image}image of the first container{"\n"}literal newline
+| Fragment | Meaning |
+|----------|---------|
+| `{range .items[*]}` … `{end}` | Iterate over each item in the list |
+| `{.metadata.name}` | Print the pod's name |
+| `{"\t"}` | Literal tab |
+| `{.spec.containers[0].image}` | Image of the first container |
+| `{"\n"}` | Literal newline |
 
 Common variants:
 
-bash# All container images (not just [0])
+```bash
+# All container images (not just [0])
 oc get pods -n openshift-monitoring \
   -l app.kubernetes.io/component=prometheus \
   -o jsonpath='{range .items[*]}{.metadata.name}{":"}{range .spec.containers[*]}{" "}{.image}{end}{"\n"}{end}'
@@ -573,34 +643,41 @@ oc get pods -n openshift-monitoring \
 # Single pod, single field (no range needed)
 oc get pod prometheus-k8s-0 -n openshift-monitoring \
   -o jsonpath='{.spec.containers[0].image}{"\n"}'
+```
 
-Gotcha — go-template vs jsonpath: OpenShift docs and oc explain examples sometimes use -o go-template=.... Either works; jsonpath is shorter for typical querying. Don't mix syntaxes — go-template uses {{ }} and range/end from Go's text/template.
+**Gotcha — go-template vs jsonpath:** some docs use `-o go-template=...`. Either works; jsonpath is shorter for typical querying. Don't mix syntaxes — go-template uses `{{ }}` and `range`/`end` from Go's `text/template`.
 
 </details>
 
 ---
+
 ### Lab 1.3 - Imperative → declarative (15 min)
+
 The "generate YAML, then edit and apply" pattern is the single most useful exam habit. This lab drills it.
 
-Prerequisites: a working project. Create one if needed: oc new-project lab13.
+**Prerequisites:** a working project. Create one if needed: `oc new-project lab13`.
 
-1. Goal: produce a web.yaml file from an imperative command, without actually creating anything on the cluster. `oc create deployment web --image=quay.io/openshifttest/hello-openshift:1.2.0 --replicas=2 --dry-run=client -o yaml > web.yaml`
+1. Produce a `web.yaml` file from an imperative command, without creating anything on the cluster.
 2. Add a `resources` block (requests/limits).
-3. Patch replicas to 4 using two different methods. Apply web.yaml. `oc apply -f web.yaml`.
-4. Patch `replicas` to 4 in two ways: `oc patch` and `oc edit`.
+3. Apply `web.yaml`.
+4. Change `replicas` to 4 in two different ways (`oc patch` and `oc edit`).
 
 <details>
-<summary>💡 Solution Step 1 </summary>
-bashoc create deployment web \
+<summary>💡 Solution Step 1</summary>
+
+```bash
+oc create deployment web \
   --image=quay.io/openshifttest/hello-openshift:1.2.0 \
   --replicas=2 \
   --dry-run=client -o yaml > web.yaml
 
 cat web.yaml
+```
 
 You get a complete Deployment manifest:
 
-yamlapiVersion: apps/v1
+```yaml
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   creationTimestamp: null
@@ -624,41 +701,52 @@ spec:
         name: hello-openshift
         resources: {}
 status: {}
+```
 
-Gotcha — --dry-run modes:
+**Gotcha — `--dry-run` modes:**
 
-ModeBehavior--dry-run=clientGenerates YAML locally, never contacts the API server. Use for templating.--dry-run=serverSends the request to the API server with the dryRun=All flag; validates against admission controllers but doesn't persist.--dry-run=none (default)Actually creates the resource.
+| Mode | Behavior |
+|------|----------|
+| `--dry-run=client` | Generates YAML locally, never contacts the API server. Use for templating. |
+| `--dry-run=server` | Sends the request to the API server in dry-run mode; validates against admission but doesn't persist. |
+| `--dry-run=none` (default) | Actually creates the resource. |
 
-For YAML generation always use client.
+For YAML generation, always use `client`.
 
-Other commands that support --dry-run=client -o yaml:
+Other commands that support `--dry-run=client -o yaml`:
 
-bashoc create service clusterip web --tcp=80 --dry-run=client -o yaml
+```bash
+oc create service clusterip web --tcp=80 --dry-run=client -o yaml
 oc create route edge web --service=web --dry-run=client -o yaml
 oc create configmap app-cm --from-literal=KEY=val --dry-run=client -o yaml
 oc create secret generic app-sec --from-literal=PASS=x --dry-run=client -o yaml
 oc create role pod-reader --verb=get,list --resource=pods --dry-run=client -o yaml
 oc adm policy add-role-to-user view alice --dry-run=client -o yaml
+```
 
 Memorize the pattern; you'll use it constantly.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 2 </summary>
-Edit web.yaml and replace resources: {} with:
+<summary>💡 Solution Step 2</summary>
 
-yaml        resources:
+Edit `web.yaml` and replace `resources: {}` with:
+
+```yaml
+        resources:
           requests:
             cpu: 100m
             memory: 128Mi
           limits:
             cpu: 500m
             memory: 256Mi
+```
 
 The full container block becomes:
 
-yaml      containers:
+```yaml
+      containers:
       - image: quay.io/openshifttest/hello-openshift:1.2.0
         name: hello-openshift
         resources:
@@ -668,18 +756,23 @@ yaml      containers:
           limits:
             cpu: 500m
             memory: 256Mi
+```
 
-Indentation matters. YAML is 2-space-indented; the container list items start with -  at the same level as the previous containers: items. If you get an error from oc apply, run it through a linter:
+**Indentation matters.** YAML is 2-space-indented; `resources:` sits at the same level as `image:` and `name:`. If `oc apply` complains, validate first:
 
-bashpython3 -c "import yaml,sys; yaml.safe_load(open('web.yaml'))" && echo OK
-# or
-oc apply -f web.yaml --dry-run=server --validate=true
+```bash
+python3 -c "import yaml; yaml.safe_load(open('web.yaml'))" && echo OK
+# or let the API server validate without persisting:
+oc apply -f web.yaml --dry-run=server
+```
 
 </details>
 
 <details>
-<summary>💡 Solution Step 3 </summary>
-bashoc apply -f web.yaml
+<summary>💡 Solution Step 3</summary>
+
+```bash
+oc apply -f web.yaml
 # deployment.apps/web created
 
 oc get deployment web
@@ -689,294 +782,353 @@ oc get deployment web
 oc get pods -l app=web
 # web-xxxxx-yyyyy   1/1   Running   0   25s
 # web-xxxxx-zzzzz   1/1   Running   0   25s
+```
 
-Apply vs create:
+**Apply vs create vs replace:**
 
-CommandIdempotent?Use whenoc create -f x.yamlNo — errors if the resource already existsFirst-time creation, or you want the erroroc apply -f x.yamlYes — creates or merges with existingMost everyday use; safe to re-runoc replace -f x.yamlYes for existing resources only; errors if not foundReplacing the whole spec; less merge magic
+| Command | Idempotent? | Use when |
+|---------|-------------|----------|
+| `oc create -f x.yaml` | No — errors if the resource already exists | First-time creation, or when you want the error |
+| `oc apply -f x.yaml` | Yes — creates or merges with existing | Most everyday use; safe to re-run |
+| `oc replace -f x.yaml` | Only for existing resources; errors if not found | Replacing the whole object |
 
-Prefer oc apply on the exam unless the task specifically calls for create or replace.
+Prefer `oc apply` on the exam unless the task specifically calls for `create` or `replace`.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 4 </summary>
-Method A — oc patch (declarative, scriptable):
+<summary>💡 Solution Step 4</summary>
 
-bashoc patch deployment web --type=merge -p '{"spec":{"replicas":4}}'
+**Method A — `oc patch`** (scriptable):
+
+```bash
+oc patch deployment web -p '{"spec":{"replicas":4}}'
 # deployment.apps/web patched
+```
 
---type choices:
+`--type` choices:
 
+| Type | What it does |
+|------|--------------|
+| `strategic` (default) | Kubernetes strategic merge patch — merges lists of known objects (e.g. containers) by their key (`name`) |
+| `merge` | JSON merge patch (RFC 7386) — maps merge, but any list you send **replaces** the whole list |
+| `json` | JSON patch (RFC 6902) ops (`add`, `remove`, `replace`, …) — needed to touch a specific array index |
 
-merge (default for --type if omitted in some versions) — strategic merge for known fields
-strategic — same as merge for most resources; preserves arrays of objects intelligently
-json — RFC 6902 ops (add, remove, replace, move, copy); needed for array index manipulation
+**Method B — `oc edit`** (interactive, opens `$EDITOR`):
 
-
-Method B — oc edit (interactive, opens $EDITOR):
-
-bashoc edit deployment web
-# Edit the YAML in vi/vim. Find `replicas: 2`, change to `replicas: 4`. Save & quit.
+```bash
+oc edit deployment web
+# Find `replicas: 2`, change to `replicas: 4`. Save & quit.
 # deployment.apps/web edited
+```
 
-Method C (bonus) — oc scale (purpose-built for replicas):
+**Method C (bonus) — `oc scale`** (purpose-built for replicas):
 
-bashoc scale deployment/web --replicas=4
+```bash
+oc scale deployment/web --replicas=4
 # deployment.apps/web scaled
+```
 
-oc scale is the cleanest for replicas specifically. Knowing all three matters because exam tasks sometimes say "use a single command" or "without an editor".
+`oc scale` is the cleanest for replicas specifically. Knowing all three matters because tasks sometimes say "use a single command" or "without an editor".
 
 Verify:
 
-bashoc get deployment web
+```bash
+oc get deployment web
 # NAME   READY   UP-TO-DATE   AVAILABLE   AGE
 # web    4/4     4            4           3m
+```
+
+**Gotcha:** if you later re-run `oc apply -f web.yaml`, replicas go back to 2 — the file is the source of truth. Update the file too.
 
 Cleanup (optional):
 
-bashoc delete -f web.yaml
+```bash
+oc delete -f web.yaml
 # or
 oc delete project lab13
+```
 
 </details>
 
-----
+---
+
 ### Lab 1.4 - Break & fix (25 min)
 
-Troubleshooting is half the exam. This lab walks through two of the most common pod-failure modes and the exact diagnostic commands to use.
+Troubleshooting is a large part of the exam. This lab walks through the most common pod-failure modes and the exact diagnostic commands to use.
 
-Prerequisites: fresh project: oc new-project lab14.
+**Prerequisites:** a fresh project: `oc new-project lab14`.
 
-In a fresh project:
-
-1. Deploy a deliberately broken app with oc new-app --image=nginx:does-not-exist. Deploy `oc new-app --image=nginx:does-not-exist`.
-2. Identify the cause with oc describe / oc get events. Use `oc describe` / `oc get events` to identify the cause.
-3. Fix by patching the image to `nginx:1.27`.
-4. Break it again with an impossible CPU request; Diagnose with events. Fix. Scale to 2, set resources.requests.cpu: "1000" (1000 whole cores - no node can satisfy this).Now break it again by setting `replicas=2` and an impossible `resources.requests.cpu: "1000"`.
+1. Deploy a deliberately broken app: `oc new-app --image=nginx:does-not-exist`.
+2. Use `oc describe` / `oc get events` to identify the cause.
+3. Fix it by pointing the Deployment at a working image: `registry.access.redhat.com/ubi9/nginx-124:latest`.
+4. Break it again: scale to 2 replicas and set an impossible CPU request (`resources.requests.cpu: "1000"` — 1000 whole cores). Diagnose with events, then fix.
 
 <details>
-<summary>💡 Solution Step 1 </summary>
-bashoc new-app --image=nginx:does-not-exist
-# --> Found container image ... (or warning that the image couldn't be inspected)
+<summary>💡 Solution Step 1</summary>
+
+```bash
+oc new-app --image=nginx:does-not-exist
+# warning: cannot use image "nginx:does-not-exist" ... (the image can't be inspected)
 # --> Creating resources ...
 #     deployment.apps "nginx" created
-#     service "nginx" created
 # --> Success
+```
 
-Note in OCP 4.18: oc new-app --image=... creates a Deployment (not a DeploymentConfig — that was 4.14 behavior).
+`oc new-app --image=...` creates a **Deployment** (not a DeploymentConfig).
 
 The pod will not start. Confirm:
 
-bashoc get pods
+```bash
+oc get pods
 # NAME                     READY   STATUS             RESTARTS   AGE
 # nginx-xxxxxxxxx-yyyyy    0/1     ImagePullBackOff   0          30s
+```
 
-ImagePullBackOff means the kubelet keeps retrying but the image registry rejects each attempt.
+`ImagePullBackOff` means the kubelet keeps retrying the pull and the registry keeps rejecting it. (Because the image couldn't be inspected, `new-app` doesn't know its ports, so it may not create a Service — that's fine for this lab.)
 
 </details>
 
 <details>
-<summary>💡 Solution Step 2 </summary>
-Method A — oc describe pod:
+<summary>💡 Solution Step 2</summary>
 
-bashoc describe pod -l deployment=nginx | tail -20
+**Method A — `oc describe pod`:**
 
-Look at the Events section at the bottom. Expect:
+```bash
+oc describe pod -l deployment=nginx | tail -20
+```
 
+(`oc new-app` labels the pods `deployment=<name>`.) Look at the Events section at the bottom:
+
+```text
 Events:
   Type     Reason     Age   From               Message
   ----     ------     ----  ----               -------
   Normal   Scheduled  1m    default-scheduler  Successfully assigned lab14/nginx-... to worker-0
   Normal   Pulling    1m    kubelet            Pulling image "nginx:does-not-exist"
-  Warning  Failed     45s   kubelet            Failed to pull image "nginx:does-not-exist": manifest for nginx:does-not-exist not found
+  Warning  Failed     45s   kubelet            Failed to pull image "nginx:does-not-exist": ... manifest unknown
   Warning  Failed     45s   kubelet            Error: ErrImagePull
   Normal   BackOff    30s   kubelet            Back-off pulling image "nginx:does-not-exist"
   Warning  Failed     30s   kubelet            Error: ImagePullBackOff
+```
 
-Method B — oc get events (namespace-wide event log, sorted by time):
+**Method B — `oc get events`** (namespace-wide event log, sorted by time):
 
-bashoc get events --sort-by=.lastTimestamp
-# or with field selector to focus on errors:
+```bash
+oc get events --sort-by=.lastTimestamp
+# or focus on problems:
 oc get events --field-selector type=Warning
+```
 
-Method C — oc describe deployment (shows Deployment-level conditions):
+**Method C — `oc describe deployment`** (Deployment-level conditions):
 
-bashoc describe deployment nginx | tail -20
+```bash
+oc describe deployment nginx | grep -A4 Conditions
 # Conditions:
 #   Type             Status  Reason
 #   ----             ------  ------
-#   Progressing      False   ProgressDeadlineExceeded
 #   Available        False   MinimumReplicasUnavailable
+#   Progressing      True    ReplicaSetUpdated     (False / ProgressDeadlineExceeded after ~10 min)
+```
 
-Diagnosis triage in order:
+**Diagnosis triage, in order:**
 
-
-oc get pods — what's the status? ImagePullBackOff / CrashLoopBackOff / Pending / Error each suggest a different category.
-oc describe pod <pod> — read the Events section. 80% of issues are visible here.
-oc logs <pod> — for CrashLoopBackOff specifically, the previous container's stderr is what matters: oc logs <pod> --previous.
-oc get events --sort-by=.lastTimestamp — wider context, catches cross-resource issues.
-
+1. `oc get pods` — what's the status? `ImagePullBackOff` / `CrashLoopBackOff` / `Pending` / `Error` each point to a different category.
+2. `oc describe pod <pod>` — read the Events section. Most issues are visible here.
+3. `oc logs <pod>` — for `CrashLoopBackOff`, the *previous* container's output is what matters: `oc logs <pod> --previous`.
+4. `oc get events --sort-by=.lastTimestamp` — wider context, catches cross-resource issues.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 3 </summary>
-Method A — oc set image (purpose-built for this):
+<summary>💡 Solution Step 3</summary>
 
-bashoc set image deployment/nginx nginx=nginx:1.27
+**Method A — `oc set image`** (purpose-built for this):
+
+```bash
+oc set image deployment/nginx nginx=registry.access.redhat.com/ubi9/nginx-124:latest
 # deployment.apps/nginx image updated
+```
 
-The syntax is <resource>/<name> <container-name>=<new-image>. The container name nginx came from the image name in Step 1; verify with oc get deployment nginx -o jsonpath='{.spec.template.spec.containers[*].name}{"\n"}'.
+The syntax is `<resource>/<name> <container-name>=<new-image>`. The container name `nginx` came from the image name in Step 1; check it with:
 
-Method B — oc patch:
+```bash
+oc get deployment nginx -o jsonpath='{.spec.template.spec.containers[*].name}{"\n"}'
+```
 
-bashoc patch deployment nginx --type=json -p='[
-  {"op":"replace","path":"/spec/template/spec/containers/0/image","value":"nginx:1.27"}
+**Method B — `oc patch`:**
+
+```bash
+oc patch deployment nginx --type=json -p='[
+  {"op":"replace","path":"/spec/template/spec/containers/0/image","value":"registry.access.redhat.com/ubi9/nginx-124:latest"}
 ]'
+```
 
-Method C — oc edit:
+**Method C — `oc edit`:**
 
-bashoc edit deployment nginx
-# Find spec.template.spec.containers[0].image, change to nginx:1.27, save.
+```bash
+oc edit deployment nginx
+# Find spec.template.spec.containers[0].image, change it, save.
+```
 
 Verify the fix:
 
-bashoc rollout status deployment/nginx
+```bash
+oc rollout status deployment/nginx
 # deployment "nginx" successfully rolled out
 
 oc get pods
 # nginx-bbbbbbbbb-ccccc   1/1   Running   0   20s
+```
 
-Gotcha — PSA in 4.18 may reject nginx:1.27: the official nginx image runs as root by default, which violates the restricted Pod Security Admission level enforced on most namespaces in 4.18. If you see:
-
-Warning: would violate PodSecurity "restricted:v1.24": allowPrivilegeEscalation != false ...
-
-…use a rootless image instead:
-
-bashoc set image deployment/nginx nginx=bitnami/nginx:latest
-# or
-oc set image deployment/nginx nginx=registry.access.redhat.com/ubi9/nginx-122:latest
-
-Both bitnami and Red Hat's UBI nginx images run as non-root.
+**Why not the official `nginx:1.27` image?** It pulls fine, but it expects to run as root and write to `/var/cache/nginx`. Under the default `restricted-v2` SCC the pod gets a random non-root UID, so it goes into `CrashLoopBackOff` with `Permission denied` in `oc logs`. That's an SCC problem, not a pull problem — see Objective 9 (Lab 9.1). The Red Hat UBI nginx image is built to run as an arbitrary non-root UID and listens on 8080.
 
 </details>
 
 <details>
-<summary>💡 Solution Step 4 </summary>
-Break:
+<summary>💡 Solution Step 4</summary>
 
-bashoc scale deployment nginx --replicas=2
+**Break:**
+
+```bash
+oc scale deployment nginx --replicas=2
 oc set resources deployment/nginx --requests=cpu=1000
 # deployment.apps/nginx resource requirements updated
+```
 
-After a few seconds the new pods will be Pending:
+The resource change starts a new rollout. The new ReplicaSet's pod can't be scheduled, and the rolling update keeps the old pods running while it waits:
 
-bashoc get pods
+```bash
+oc get pods
 # NAME                     READY   STATUS    RESTARTS   AGE
-# nginx-xxxxxxxxxx-aaaaa   1/1     Running   0          2m       (old replica from step 3, will eventually be replaced)
-# nginx-yyyyyyyyyy-bbbbb   0/1     Pending   0          15s
-# nginx-yyyyyyyyyy-ccccc   0/1     Pending   0          15s
+# nginx-xxxxxxxxxx-aaaaa   1/1     Running   0          2m    ← old ReplicaSet, kept by the rolling update
+# nginx-xxxxxxxxxx-bbbbb   1/1     Running   0          2m    ← old ReplicaSet
+# nginx-yyyyyyyyyy-ccccc   0/1     Pending   0          15s   ← new ReplicaSet, can't schedule
+```
 
-Diagnose:
+**Diagnose** (`oc describe` has no `--field-selector`, so find the Pending pod first):
 
-bashoc describe pod -l app=nginx --field-selector=status.phase=Pending | tail -10
+```bash
+oc get pods --field-selector=status.phase=Pending
+oc describe pod <pending-pod-name> | tail -10
+```
 
 Look for:
 
+```text
 Events:
   Warning  FailedScheduling  10s  default-scheduler  0/6 nodes are available:
-                                     6 Insufficient cpu. preemption: 0/6 nodes are available:
-                                     6 No preemption victims found for incoming pod.
+    6 Insufficient cpu. preemption: 0/6 nodes are available:
+    6 No preemption victims found for incoming pod.
+```
 
-Key phrase: Insufficient cpu. The scheduler ran the resource math and concluded no node can host this pod.
+Key phrase: **`Insufficient cpu`**. The scheduler did the resource math and no node can host this pod.
 
-Fix - set a realistic CPU request:
+**Fix** — set a realistic CPU request:
 
-bashoc set resources deployment/nginx --requests=cpu=100m
+```bash
+oc set resources deployment/nginx --requests=cpu=100m
 # deployment.apps/nginx resource requirements updated
 
 oc rollout status deployment/nginx
 oc get pods
-# All 2 replicas Running
+# 2 replicas Running
+```
 
-To clear the request entirely (revert to "no request"):
+To remove the CPU request entirely instead of changing it:
 
-bashoc set resources deployment/nginx --requests=cpu=0
-# or set both requests AND limits to empty
-oc set resources deployment/nginx --requests=cpu=0,memory=0 --limits=cpu=0,memory=0
+```bash
+oc patch deployment nginx --type=json \
+  -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/cpu"}]'
+```
 
-Other "pod stuck Pending" causes worth knowing:
+(`--requests=cpu=0` sets the request to zero; it doesn't remove the field.)
 
-Event messageCauseFixInsufficient cpu / Insufficient memoryResource requests > any node has freeLower the request, or add nodesnode(s) had untolerated taintNode has a taint your pod doesn't tolerateAdd tolerations, or use a different node selectornode(s) didn't match Pod's node affinity/selectornodeSelector or nodeAffinity matches no nodeLoosen the selector0/N nodes are available, ... volume node affinity conflictPVC bound to a PV in a different AZ than scheduled podRecreate the PVC with WaitForFirstConsumer, or pin the pod to the volume's zone0/N nodes are available, ... pod has unbound immediate PersistentVolumeClaimsPVC is Pending (no SC matches, no PV)Fix the PVC first
+**Other "pod stuck Pending" causes worth knowing:**
+
+| Event message | Cause | Fix |
+|---------------|-------|-----|
+| `Insufficient cpu` / `Insufficient memory` | Requests exceed any node's free capacity | Lower the request, or add nodes |
+| `node(s) had untolerated taint` | Node has a taint the pod doesn't tolerate | Add tolerations, or target other nodes |
+| `node(s) didn't match Pod's node affinity/selector` | `nodeSelector` / `nodeAffinity` matches no node | Fix or loosen the selector |
+| `volume node affinity conflict` | PV is in a different zone than the nodes the pod can use | Use a `WaitForFirstConsumer` StorageClass, or pin the pod to the volume's zone |
+| `pod has unbound immediate PersistentVolumeClaims` | PVC is `Pending` (no matching StorageClass or PV) | Fix the PVC first |
 
 Cleanup:
 
-bashoc delete project lab14
+```bash
+oc delete project lab14
+```
 
 </details>
 
 ---
+
 ### Lab 1.5 - Cluster ops sweep (20 min)
 
+A health-check drill. On exam day you want this to take under 5 minutes — the techniques also surface clues for other tasks ("which operator is broken? where's the noisy pod?").
+
+**Prerequisites:**
+
+- Cluster-admin.
+- `oc adm top` works only when the monitoring stack is healthy (it usually is on a real cluster; in CRC you may need to wait a few minutes after start).
+
 1. `oc get clusteroperators` — any `AVAILABLE=False` or `DEGRADED=True`?
-2. For one operator, `oc describe co <name>` and read its conditions.
-3. `oc adm top nodes` and `oc adm top pods -A | sort -k4 -h | tail`.
-4. Find the top 5 noisiest pods by log volume (`oc logs <pod> | wc -l` for a few candidates).
-
-Lab 1.5 — Cluster ops sweep (20 min)
-
-A health-check drill. On exam day you want this to take under 5 minutes — the techniques here also surface clues for other tasks ("which operator is broken? where's the noisy pod?").
-
-Prerequisites:
-
-
-Cluster-admin.
-oc adm top works only when metrics-server / Prometheus is healthy (it usually is on a real cluster; in CRC you may need to wait a few minutes after start).
-
-
-
-Step 1 — oc get clusteroperators — any AVAILABLE=False or DEGRADED=True?
+2. For one operator, run `oc describe co <name>` and read its conditions.
+3. Run `oc adm top nodes` and find the most resource-hungry pods cluster-wide.
+4. Find the top 5 noisiest pods by log volume.
 
 <details>
-<summary>💡 Solution</summary>
-bashoc get clusteroperators
+<summary>💡 Solution Step 1</summary>
+
+```bash
+oc get clusteroperators
 # or short form:
 oc get co
+```
 
 Expected output (truncated):
 
-NAME                                       VERSION   AVAILABLE   PROGRESSING   DEGRADED   SINCE
-authentication                             4.18.x    True        False         False      2h
-console                                    4.18.x    True        False         False      2h
-dns                                        4.18.x    True        False         False      2h
-etcd                                       4.18.x    True        False         False      2h
+```text
+NAME             VERSION   AVAILABLE   PROGRESSING   DEGRADED   SINCE
+authentication   4.18.x    True        False         False      2h
+console          4.18.x    True        False         False      2h
+dns              4.18.x    True        False         False      2h
+etcd             4.18.x    True        False         False      2h
 ...
+```
 
-A healthy cluster has every CO at: AVAILABLE=True, PROGRESSING=False, DEGRADED=False.
+A healthy cluster has every CO at `AVAILABLE=True`, `PROGRESSING=False`, `DEGRADED=False`.
 
-Quick scan for non-healthy COs:
+Quick scan for unhealthy COs:
 
-bashoc get co | grep -Ev 'True\s+False\s+False'
+```bash
+oc get co | grep -Ev 'True\s+False\s+False'
 # Prints the header and any unhealthy operators
+```
 
-As-jsonpath probe (for scripting):
+Jsonpath probe (for scripting):
 
-bashoc get co -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Available")].status}{"\t"}{.status.conditions[?(@.type=="Degraded")].status}{"\n"}{end}'
+```bash
+oc get co -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Available")].status}{"\t"}{.status.conditions[?(@.type=="Degraded")].status}{"\n"}{end}'
+```
 
-Why this is the right starting point: if any CO is degraded, almost every other diagnostic you run downstream will be misleading. Always check oc get co first.
+**Why start here:** if a cluster operator is degraded, many downstream diagnostics will be misleading. Check `oc get co` first.
 
 </details>
 
-Step 2 — oc describe co <name> on one operator and read its conditions
-
 <details>
-<summary>💡 Solution</summary>
-Pick any operator (e.g., authentication, or whichever is interesting):
+<summary>💡 Solution Step 2</summary>
 
-bashoc describe co authentication | sed -n '/Conditions:/,/Extension:/p'
+Pick any operator (e.g. `authentication`):
+
+```bash
+oc describe co authentication | sed -n '/Conditions:/,/Extension:/p'
+```
 
 Output structure:
 
+```text
 Conditions:
   Last Transition Time:  2026-06-09T12:00:00Z
   Message:               All is well
@@ -992,124 +1144,143 @@ Conditions:
   Last Transition Time:  2026-06-09T12:00:00Z
   Status:                True
   Type:                  Upgradeable
+```
 
-Five conditions to know:
+Conditions to know:
 
-TypeHealthy valueMeaningAvailableTrueOperator's workload is servingProgressingFalseOperator isn't mid-rolloutDegradedFalseOperator is functionalUpgradeableTrueCluster can be upgraded as far as this operator is concernedEvaluationConditionsDetectedFalse (or absent)No unusual conditions noticed
+| Type | Healthy value | Meaning |
+|------|---------------|---------|
+| `Available` | `True` | The operator's workload is serving |
+| `Progressing` | `False` | The operator isn't mid-rollout |
+| `Degraded` | `False` | The operator is functional |
+| `Upgradeable` | `True` | The cluster can be upgraded as far as this operator is concerned |
+| `EvaluationConditionsDetected` | `False` (or absent) | No unusual conditions detected |
 
-When an operator is degraded, the Message field is the gold — it tells you exactly which subordinate object failed.
+When an operator is degraded, the **Message** field tells you which underlying object failed.
 
 Faster targeted query:
 
-bashoc get co authentication -o jsonpath='{range .status.conditions[*]}{.type}={.status}\t{.message}{"\n"}{end}'
+```bash
+oc get co authentication -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\t"}{.message}{"\n"}{end}'
+```
 
 </details>
 
-Step 3 — oc adm top nodes and find the most-resource-hungry pods cluster-wide
-
 <details>
-<summary>💡 Solution</summary>
+<summary>💡 Solution Step 3</summary>
+
 Nodes:
 
-bashoc adm top nodes
+```bash
+oc adm top nodes
 # NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%
 # master-0   620m         15%    3500Mi          43%
 # worker-0   1200m        30%    8200Mi          51%
 # ...
+```
 
-Sort by CPU:
+Sorted (highest first):
 
-bashoc adm top nodes --sort-by=cpu
+```bash
+oc adm top nodes --sort-by=cpu
 oc adm top nodes --sort-by=memory
+```
 
-Top 10 pods by CPU (cluster-wide):
+Top 10 pods by CPU, cluster-wide (`--sort-by` sorts **descending**, so the biggest are at the top — use `head`, not `tail`):
 
-bashoc adm top pods -A --sort-by=cpu | tail -10
+```bash
+oc adm top pods -A --sort-by=cpu | head -11      # header + 10 rows
+```
 
---sort-by=cpu is preferable to a shell sort -k4 -h pipe because it understands units (m, Mi, Gi).
+`--sort-by=cpu` is better than a shell `sort` pipe because it understands units (`m`, `Mi`, `Gi`).
 
 Top 10 pods by memory:
 
-bashoc adm top pods -A --sort-by=memory | tail -10
+```bash
+oc adm top pods -A --sort-by=memory | head -11
+```
 
-Per-container breakdown (more granular):
+Per-container breakdown:
 
-bashoc adm top pods -A --containers --sort-by=memory | tail -20
+```bash
+oc adm top pods -A --containers --sort-by=memory | head -21
+```
 
-Gotcha — metrics not available yet: if oc adm top returns metrics not available yet, the metrics-server (or in OCP's case, the monitoring stack's Prometheus Adapter) hasn't gathered data. Wait 60 seconds after a fresh cluster start and retry. In CRC, this can take 3–5 minutes.
+**Gotcha — `metrics not available yet`:** the monitoring stack hasn't gathered data. Wait a minute and retry; on a freshly started CRC this can take 3–5 minutes.
 
 </details>
 
-Step 4 — Find the top 5 noisiest pods by log volume
-
-Definition of "noisy": produces the most log lines per minute. Useful when you suspect a pod is logging an error in a tight loop.
-
 <details>
-<summary>💡 Solution</summary>
-There's no built-in oc flag for this, so script it. Here's a one-liner that samples the last 1 minute of logs across all pods and ranks them:
+<summary>💡 Solution Step 4</summary>
 
-bashoc get pods -A --no-headers \
+"Noisy" here means the most log lines per minute — useful when you suspect a pod is logging an error in a tight loop.
+
+There's no built-in `oc` flag for this, so script it. This samples the last minute of logs across all pods and ranks them:
+
+```bash
+oc get pods -A --no-headers \
   -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
   | while read ns pod; do
-      lines=$(oc logs --since=1m -n "$ns" "$pod" --tail=-1 2>/dev/null | wc -l)
+      lines=$(oc logs --since=1m -n "$ns" "$pod" --all-containers 2>/dev/null | wc -l)
       printf "%6d  %s/%s\n" "$lines" "$ns" "$pod"
     done \
   | sort -rn \
   | head -5
+```
 
-Faster (and more pragmatic) approach if you just want a quick smell test — focus on a single noisy namespace:
+Quicker smell test — focus on a single namespace:
 
-bashfor p in $(oc get pods -n openshift-monitoring -o name); do
-  echo "=== $p ==="
-  oc logs --since=1m -n openshift-monitoring "$p" 2>/dev/null | wc -l
-done | paste - - - | sort -k2 -rn | head -5
-
-Even more pragmatic — use oc adm node-logs to look at journal-level noise (the systemd journal sees every container's output):
-
-bash# Pick a worker
-oc adm node-logs worker-0 --since=1m | head -50
+```bash
+for p in $(oc get pods -n openshift-monitoring -o name); do
+  printf "%6d  %s\n" "$(oc logs --since=1m -n openshift-monitoring "$p" --all-containers 2>/dev/null | wc -l)" "$p"
+done | sort -rn | head -5
+```
 
 On the exam, log analysis is usually targeted, not cluster-wide:
 
-bash# Last 100 lines, follow live:
+```bash
+# Last 100 lines, follow live:
 oc logs -f deployment/myapp --tail=100
 
-# All containers in a pod:
-oc logs -c <container> -p <pod>           # previous container instance
-oc logs --all-containers=true <pod>       # all containers in one stream
+# Previous instance of one container:
+oc logs <pod> -c <container> -p
 
-# All pods of a deployment:
+# All containers in one stream:
+oc logs <pod> --all-containers=true
+
+# All pods of a deployment (by label):
 oc logs -l app=myapp --tail=20 --max-log-requests=10
+```
 
 </details>
 
 ---
+
 ### Lab 1.6 - Cluster update dry-run (CRC) (15 min)
 
-1. `oc adm upgrade` — note current channel & available.
-2. `oc adm upgrade channel candidate-4.18` (don't actually upgrade in CRC unless you have time to spare).
-3. Pause the `worker` MCP, change a MachineConfig (e.g. add a label), then unpause and watch reconciliation.
+> ℹ️ Cluster updates are taught in the DO280 course but are **not** in the EX280 objective list. Do this lab for understanding; don't over-invest.
 
-Lab 1.6 — Cluster update dry-run (CRC) (15 min)
+This lab is read-mostly. Don't actually upgrade a CRC instance — the time and disk cost are large, and CRC usually has no update service configured, so `oc adm upgrade` may show no recommended updates. The point is to know the commands and what they output.
 
-This lab is read-mostly. Don't actually upgrade a CRC instance — the disk usage and time cost are large. The point is to know the commands and what they output, so on the real exam you can navigate the update flow confidently.
+**Prerequisites:**
 
-Prerequisites:
+- CRC, SNO, or a real cluster with cluster-admin.
+- Not the Developer Sandbox — you don't have permission there.
 
-
-CRC, SNO, or a real cluster with cluster-admin.
-Do not run this on Developer Sandbox — you don't have permission and the operation would fail loudly.
-
-
-
-Step 1 — oc adm upgrade — note the current channel and what's available
+1. Run `oc adm upgrade` — note the current channel and what's available.
+2. Switch the channel to `candidate-4.18` (don't actually upgrade).
+3. Pause a MachineConfigPool, apply a MachineConfig, then unpause and watch reconciliation.
 
 <details>
-<summary>💡 Solution</summary>
-bashoc adm upgrade
+<summary>💡 Solution Step 1</summary>
 
-Typical output on a healthy cluster:
+```bash
+oc adm upgrade
+```
 
+Typical output on a connected, healthy cluster:
+
+```text
 Cluster version is 4.18.5
 
 Upstream: https://api.openshift.com/api/upgrades_info/v1/graph
@@ -1120,91 +1291,87 @@ Recommended updates:
   VERSION   IMAGE
   4.18.6    quay.io/openshift-release-dev/ocp-release@sha256:...
   4.18.7    quay.io/openshift-release-dev/ocp-release@sha256:...
+```
 
-Updates with known issues:
+Things to read off this output:
 
-  Version: 4.18.4
-    Image: quay.io/openshift-release-dev/ocp-release@sha256:...
-    Reason: ServiceCABundleInjection
-    Message: ...
-
-Three things to read off this output:
-
-
-Channel — drives which versions are considered for upgrade.
-
-stable-X.Y — production-tested patches for the X.Y minor.
-fast-X.Y — patches that have passed soak testing but are newer than stable.
-candidate-X.Y — pre-release, for testing.
-eus-X.Y — Extended Update Support; long-lived versions to enable EUS-to-EUS jumps.
-
-
-
-Recommended updates — versions the upstream graph says you can safely go to from your current version.
-Known issues — versions that are reachable in the graph but have caveats; Red Hat is telling you "if you go here, read this first."
-
+- **Channel** — drives which versions are considered:
+  - `stable-X.Y` — production-ready patches for the X.Y minor.
+  - `fast-X.Y` — patches as soon as they're GA, before they reach stable.
+  - `candidate-X.Y` — pre-release, for testing.
+  - `eus-X.Y` — Extended Update Support channel, used for EUS-to-EUS updates.
+- **Recommended updates** — versions the update graph says you can safely move to from your current version.
+- **Not-recommended updates** — reachable, but with known risks; see them with `--include-not-recommended`.
 
 Quick variants:
 
-bashoc get clusterversion         # condensed view
-oc get clusterversion -o yaml | yq '.spec.channel, .status.history[0]'
-oc adm upgrade --include-not-recommended    # show targets normally hidden
+```bash
+oc get clusterversion                                     # condensed view
+oc get clusterversion version -o jsonpath='{.spec.channel}{"\n"}{.status.history[0].version}{"\n"}'
+oc adm upgrade --include-not-recommended                  # show targets normally hidden
+```
 
 </details>
 
-Step 2 — Switch to channel candidate-4.18 (don't actually upgrade)
-
 <details>
-<summary>💡 Solution</summary>
-bashoc adm upgrade channel candidate-4.18
-# Updated the cluster channel to "candidate-4.18"
+<summary>💡 Solution Step 2</summary>
+
+```bash
+oc adm upgrade channel candidate-4.18
+```
 
 Verify the change:
 
-bashoc get clusterversion version -o jsonpath='{.spec.channel}{"\n"}'
+```bash
+oc get clusterversion version -o jsonpath='{.spec.channel}{"\n"}'
 # candidate-4.18
 
 oc adm upgrade
-# Now lists candidate-4.18 versions as recommended targets.
-
-Channel choice matters for the exam: if an exam task says "configure the cluster to receive 4.18 EUS updates", you'd run:
-
-bashoc adm upgrade channel eus-4.18
-
-Channel choice for production: generally stable-X.Y for the X.Y you're on. fast-X.Y if you want patches sooner. candidate-X.Y only in test clusters. eus-X.Y if you're standing on an EUS release and plan to jump.
+# Now evaluates candidate-4.18 versions as targets.
+```
 
 Roll back:
 
-bashoc adm upgrade channel stable-4.18
+```bash
+oc adm upgrade channel stable-4.18
+```
 
-Gotcha — channel name format: there's no -z suffix. stable-4.18.5 is wrong; the channel covers all .Z versions inside 4.18.
+**Channel choice:** generally `stable-X.Y` for the minor you're on; `fast-X.Y` for patches sooner; `candidate-X.Y` only in test clusters; `eus-X.Y` when you're on an EUS release and plan to jump.
+
+**Gotcha — channel name format:** there's no `.z` suffix. `stable-4.18.5` is wrong; the channel covers all z-stream versions of 4.18.
 
 </details>
 
-Step 3 — Pause the worker MCP, change a MachineConfig, then unpause and watch reconciliation
-
-This is the canonical "make a node configuration change with controlled reboot timing" workflow. On the exam it shows up as "apply this MachineConfig but don't reboot nodes immediately."
-
 <details>
-<summary>💡 Solution</summary>
-Show current MCPs:
+<summary>💡 Solution Step 3</summary>
 
-bashoc get mcp
-# NAME     CONFIG                                              UPDATED   UPDATING   DEGRADED
-# master   rendered-master-abc123...                           True      False      False
-# worker   rendered-worker-def456...                           True      False      False
+This is the "make a node configuration change with controlled reboot timing" workflow.
 
-Pause the worker MCP:
+Show current MCPs and how many machines each one has:
 
-bashoc patch mcp worker --type=merge -p '{"spec":{"paused":true}}'
+```bash
+oc get mcp
+# NAME     CONFIG                    UPDATED   UPDATING   DEGRADED   MACHINECOUNT
+# master   rendered-master-abc123    True      False      False      3
+# worker   rendered-worker-def456    True      False      False      3
+```
+
+> ⚠️ **On CRC/SNO the single node belongs to the `master` pool** and `worker` shows `MACHINECOUNT 0`, so pausing `worker` demonstrates nothing. On those clusters, use `master` in place of `worker` in the commands and YAML below — and expect the node to reboot (a few minutes of API downtime).
+
+Pause the pool:
+
+```bash
+oc patch mcp worker --type=merge -p '{"spec":{"paused":true}}'
 # machineconfigpool.machineconfiguration.openshift.io/worker patched
 
 oc get mcp worker -o jsonpath='{.spec.paused}{"\n"}'
 # true
+```
 
-Apply a trivial MachineConfig change — for the dry-run, add a label to nodes via the MCP (no reboot needed) or write a small file via MachineConfig:
+Apply a small MachineConfig that writes a file:
 
-yaml# small-mc.yaml
+```yaml
+# small-mc.yaml
 apiVersion: machineconfiguration.openshift.io/v1
 kind: MachineConfig
 metadata:
@@ -1221,57 +1388,59 @@ spec:
         mode: 0644
         contents:
           source: data:text/plain;charset=utf-8;base64,SGVsbG8gZnJvbSBNQ08K
+```
 
-bashoc apply -f small-mc.yaml
+```bash
+oc apply -f small-mc.yaml
 # machineconfig.machineconfiguration.openshift.io/99-worker-test-motd created
+```
 
-Observe that the MCO rendered a new config but did NOT apply it (because the MCP is paused):
+Observe that a new rendered config exists but the pool does **not** roll it out while paused:
 
-bashoc get mcp worker
-# NAME     CONFIG                                              UPDATED   UPDATING   DEGRADED
-# worker   rendered-worker-def456...                           True      False      False
-#          ^ still the old rendered config; not rolling
+```bash
+oc get mcp worker
+# NAME     CONFIG                    UPDATED   UPDATING   DEGRADED
+# worker   rendered-worker-def456    False     False      False
+#          ^ still the old rendered config; UPDATED=False because a newer one is waiting
 
-bashoc get mc | grep test-motd
+oc get mc | grep test-motd
 # 99-worker-test-motd  ...
+```
 
 Unpause and watch reconciliation:
 
-bashoc patch mcp worker --type=merge -p '{"spec":{"paused":false}}'
+```bash
+oc patch mcp worker --type=merge -p '{"spec":{"paused":false}}'
 
-# Watch the rollout:
 oc get mcp worker -w
-# NAME     CONFIG                                              UPDATED   UPDATING   DEGRADED
-# worker   rendered-worker-def456...                           False     True       False     ← rolling
-# worker   rendered-worker-NEW...                              True      False      False    ← done
+# NAME     CONFIG                    UPDATED   UPDATING   DEGRADED
+# worker   rendered-worker-def456    False     True       False     ← rolling
+# worker   rendered-worker-NEW...    True      False      False     ← done
+```
 
-Each worker node will cordon, drain, reboot, and uncordon serially. On CRC (single-node), the node will reboot — expect a 2–3 minute outage of the kubelet during the reboot.
+Each node in the pool is cordoned, drained, rebooted and uncordoned in turn (`maxUnavailable` defaults to 1).
 
 Cleanup:
 
-bashoc delete mc 99-worker-test-motd
-# Workers will roll AGAIN to remove the file. If you don't want that, leave it.
+```bash
+oc delete mc 99-worker-test-motd
+# The pool rolls AGAIN to remove the file.
+```
 
-Why pausing MCPs is critical knowledge for 4.18 exam:
+**Why pausing pools matters:**
 
+- In EUS-to-EUS updates, pausing the worker pool lets the control plane go through the intermediate version without rebooting workers twice.
+- It lets you batch several MachineConfig changes into a single reboot.
 
-EUS-to-EUS upgrades require pausing the worker MCP so workers don't reboot until you tell them to.
-During cluster upgrades, controlling reboots is essential for workload availability.
-Day-2 ops like rotating ignition certs go through this exact mechanism.
+Reference commands:
 
-
-Reference command set:
-
-bash# Pause all worker pools (if you have multiple):
-for mcp in $(oc get mcp -o jsonpath='{range .items[?(@.metadata.labels.machineconfiguration\.openshift\.io/mco-built-in!="")]}{.metadata.name}{" "}{end}'); do
-  oc patch mcp $mcp --type=merge -p '{"spec":{"paused":true}}'
-done
-
-# Unpause:
-oc patch mcp worker --type=merge -p '{"spec":{"paused":false}}'
-
-# Check which MCs are merged into the current rendered config:
+```bash
+# Which MachineConfigs are merged into the pool's current rendered config:
 oc get mcp worker -o jsonpath='{.status.configuration.source[*].name}{"\n"}'
+
+# Is a pool paused?
+oc get mcp -o custom-columns=NAME:.metadata.name,PAUSED:.spec.paused
+```
 
 </details>
 
