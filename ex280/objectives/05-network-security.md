@@ -598,7 +598,7 @@ spec:
         - {containerPort: 8443}
         volumeMounts:
         - {name: tls, mountPath: /etc/nginx/tls, readOnly: true}
-        - {name: conf, mountPath: /etc/nginx/conf.d, readOnly: true}
+        - {name: conf, mountPath: /opt/app-root/etc/nginx.d, readOnly: true}   # UBI nginx loads extra server blocks from here, not /etc/nginx/conf.d
       volumes:
       - {name: tls, secret: {secretName: pod-cert}}
       - {name: conf, configMap: {name: nginx-ssl-conf}}
