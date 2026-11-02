@@ -1,28 +1,24 @@
-# EX280 - Red Hat Certified System Administrator in OpenShift (Study Plan)
+# EX280 - Red Hat Certified System Administrator in OpenShift (Study Plan & SRE Portfolio)
 
-This repository is a consolidated study resource for the **EX280** exam, merging the official objectives with hands-on labs and the OpenShift Container Platform (OCP) documentation. Each objective file contains `.yaml` manifests, `oc` command cheatsheets, and step-by-step labs (most with a hidden worked solution).
+This repository is a consolidated study resource and hands-on SRE/Platform Engineering portfolio for the **EX280** exam, merging the official Red Hat objectives with hands-on labs and OpenShift Container Platform (OCP) **4.18 – 4.22** documentation. Each objective file contains `.yaml` manifests, `oc` command cheatsheets, and step-by-step labs (each lab has a hidden worked solution).
 
-> **🎯 Version note**
-> - The notes and labs were written against **OCP 4.18** (GA February 2025).
-> - Red Hat's exam page now states the exam is based on **OCP 4.22**, and that **multiple exam versions are in use** at the same time. Check the Red Hat Learning Management System for the version you are booked on.
-> - The objective list itself is unchanged between the two, so everything here still maps 1:1. See [What changed since 4.18](#what-changed) for the version-specific differences.
->
+> **🎯 Target version: OpenShift Container Platform 4.18 – 4.22 (Current EX280 Baseline).**
 > Merged & sorted from:
 > - The [official Red Hat EX280 objectives page](https://www.redhat.com/en/services/training/red-hat-certified-openshift-administrator-exam)
-> - The OCP product documentation at <https://docs.redhat.com/en/documentation/openshift_container_platform/>
-> - Community labs (`anishrana2001/Openshift`, `mgonzalezo/RedHat_ex280` - both authored for 4.14; commands here have been rewritten for 4.18+).
+> - The OCP product documentation at <https://docs.redhat.com/en/documentation/openshift_container_platform/4.22> (and 4.18 EUS)
+> - Community labs (`anishrana2001/Openshift`, `mgonzalezo/RedHat_ex280` - originally authored for 4.14; every command here has been modernized for **4.18–4.22**).
 
-> **Red Hat rule:** all configurations must **persist and keep working** through the platform's normal lifecycle (including reboots) without manual intervention. Use `oc`/YAML - never edit files on nodes by hand.
+> **Red Hat rule:** All configurations must **persist after reboot** without manual intervention. Always use declarative `oc`/YAML workflows—never edit files on nodes by hand.
 
-> **Heads up**: These are my own personal study notes - not official, not affiliated with Red Hat, and no guarantees they're complete or error-free. Cross-check with the official docs and take it with a small pinch of salt. 🙂
+> **Heads up:** These are personal study notes and portfolio labs—not official, not affiliated with Red Hat, and with no guarantees they are complete or error-free. Cross-check with the official docs and take them with a small pinch of salt. 🙂
 
 ---
 
 ## 🎯 1. Manage OpenShift Container Platform
 
-*Goal: Master the CLI and web console, and run basic cluster health checks.*
+*Goal: Master the CLI and web console, and run cluster health checks.*
 
-**Theory** ([`01-manage-ocp.md`](objectives/01-manage-ocp.md)) - CLI & console · projects · images (tags/digests) · querying & filtering · import/export/edit · cluster status · logs & troubleshooting · monitoring · cluster updates (DO280 course content, not an exam objective)
+**Theory** ([`objectives/01-manage-ocp.md`](objectives/01-manage-ocp.md)) - CLI & console · projects · images (tags/digests) · querying & filtering · import/export/edit · cluster status · logs & troubleshooting · monitoring · cluster updates
 
 <details><summary>📋 Official objective coverage (Red Hat)</summary>
 
@@ -49,16 +45,17 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 - [ ] **Lab 1.4:** [Troubleshooting: break & fix](objectives/01-manage-ocp.md#lab-14---break--fix-25-min)
 - [ ] **Lab 1.5:** [Cluster ops sweep](objectives/01-manage-ocp.md#lab-15---cluster-ops-sweep-20-min)
 - [ ] **Lab 1.6:** [Cluster update dry-run (CRC)](objectives/01-manage-ocp.md#lab-16---cluster-update-dry-run-crc-15-min)
+- [ ] **Portfolio Challenge 1:** [AI Cluster Pre-Flight & Readiness Auditor](platform-lab/01-cluster-diagnostics/CHALLENGE.md)
 - **Key Commands:** `oc adm top nodes`, `oc describe`, `oc logs -f`, `oc get co`.
 
-## ⚙️ 2. Work with Resource Manifests
+## ⚙️ 2. Declarative Resource Management (Manifests & Kustomize)
 
 *Goal: Move from ad-hoc commands to Infrastructure as Code.*
 
-**Theory** ([`02-resource-manifests.md`](objectives/02-resource-manifests.md)) - YAML anatomy · updating deployments · ConfigMaps · Secrets · Kustomize basics · Kustomize overlays
+**Theory** ([`objectives/02-resource-manifests.md`](objectives/02-resource-manifests.md)) - YAML anatomy · updating deployments · ConfigMaps · Secrets · Kustomize basics · Kustomize overlays
 
 <details><summary>📋 Official objective coverage (Red Hat)</summary>
-
+ 
 - [ ] Deploy applications from YAML resource manifests
 - [ ] Update application deployments
 - [ ] Deploy applications using Kustomize
@@ -74,87 +71,47 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 - [ ] **Lab 2.4:** [Kustomize bases and overlays](objectives/02-resource-manifests.md#lab-24--kustomize-base--2-overlays-40-min)
 - **Key Commands:** `oc create ... --dry-run=client -o yaml`, `oc apply -k`, `oc set env`, `oc patch`.
 
-## 📦 3. Deploy Applications (Templates & Helm)
+## 📦 3. Deploy Packaged Applications (Templates & Helm)
 
 *Goal: Automate deployments using standard packaging tools.*
 
-**Theory** ([`03-deploy-applications.md`](objectives/03-deploy-applications.md)) - `oc new-app` · templates · Helm · Deployments, ReplicaSets, labels & selectors · services · routes
+**Theory** ([`objectives/03-deploy-applications.md`](objectives/03-deploy-applications.md))
 
-<details><summary>📋 Official objective coverage (Red Hat)</summary>
-
-- [ ] Deploy applications from templates and Helm charts
-- [ ] Manage application deployments
-- [ ] Work with replica sets
-- [ ] Work with labels and selectors
-- [ ] Configure services
-- [ ] Expose applications to external access
-
-</details>
-
-- [ ] **Lab 3.1:** [Five flavors of `oc new-app`](objectives/03-deploy-applications.md#lab-31---five-flavors-of-new-app-25-min)
-- [ ] **Lab 3.2:** [Author and process OpenShift Templates](objectives/03-deploy-applications.md#lab-32---author-and-use-a-template-25-min)
-- [ ] **Lab 3.3:** [Service & Route end-to-end](objectives/03-deploy-applications.md#lab-33---service--route-end-to-end-20-min)
-- [ ] **Lab 3.4:** [Installing and managing Helm charts](objectives/03-deploy-applications.md#lab-34---helm-install--values-25-min)
+- [ ] **Lab 3.1:** [Five flavors of `oc new-app`](objectives/03-deploy-applications.md#lab-31--five-flavors-of-new-app-25-min)
+- [ ] **Lab 3.2:** [Author and process OpenShift Templates](objectives/03-deploy-applications.md#lab-32--author-and-use-a-template-25-min)
+- [ ] **Lab 3.3:** [Service & Route end-to-end](objectives/03-deploy-applications.md#lab-33--service--route-end-to-end-20-min)
+- [ ] **Lab 3.4:** [Installing and managing Helm charts](objectives/03-deploy-applications.md#lab-34--helm-install--values-25-min)
 - **Key Commands:** `oc new-app`, `oc process`, `oc expose`, `helm install/upgrade/rollback`.
 
 ## 🔐 4. Manage Authentication and Authorization
 
 *Goal: Secure the cluster and manage multi-tenancy.*
 
-**Theory** ([`04-auth-and-authorization.md`](objectives/04-auth-and-authorization.md)) - OAuth & identity providers · HTPasswd · users & identities · groups · RBAC · self-provisioning
+**Theory** ([`objectives/04-auth-and-authorization.md`](objectives/04-auth-and-authorization.md))
 
-<details><summary>📋 Official objective coverage (Red Hat)</summary>
-
-- [ ] Configure the HTPasswd identity provider for authentication
-- [ ] Create and delete users
-- [ ] Modify user passwords
-- [ ] Create and manage groups
-- [ ] Modify user and group permissions
-
-</details>
-
-- [ ] **Lab 4.1:** [Configure HTPasswd identity provider + first user](objectives/04-auth-and-authorization.md#lab-41---configure-htpasswd--first-user-25-min)
-- [ ] **Lab 4.2:** [Promote, demote, change password](objectives/04-auth-and-authorization.md#lab-42---promote-demote-change-password-15-min)
-- [ ] **Lab 4.3:** [Groups + project-scoped RBAC](objectives/04-auth-and-authorization.md#lab-43---groups--project-scoped-roles-25-min)
-- [ ] **Lab 4.4:** [Self-provisioning lockdown](objectives/04-auth-and-authorization.md#lab-44---self-provisioning-lockdown-15-min)
-- **Key Commands:** `htpasswd -B`, `oc set data secret/...`, `oc adm groups`, `oc adm policy add-role-to-group`, `oc auth can-i`.
+- [ ] **Lab 4.1:** [Configure HTPasswd identity provider + first user](objectives/04-auth-and-authorization.md#lab-41--configure-htpasswd--first-user-25-min)
+- [ ] **Lab 4.2:** [Promote, demote, change password](objectives/04-auth-and-authorization.md#lab-42--promote-demote-change-password-15-min)
+- [ ] **Lab 4.3:** [Groups + project-scoped RBAC](objectives/04-auth-and-authorization.md#lab-43--groups--project-scoped-roles-25-min)
+- [ ] **Lab 4.4:** [Self-provisioning lockdown](objectives/04-auth-and-authorization.md#lab-44--self-provisioning-lockdown-15-min)
+- **Key Commands:** `htpasswd -B`, `oc adm groups`, `oc adm policy add-role-to-group`, `oc auth can-i`.
 
 ## 🌐 5. Configure Network Security
 
 *Goal: Control traffic flow into and within the cluster.*
 
-**Theory** ([`05-network-security.md`](objectives/05-network-security.md)) - networking stack · routes · TLS (edge / passthrough / re-encrypt) · NetworkPolicy · IngressController · internal TLS (service serving certificates) · SDN troubleshooting
-
-<details><summary>📋 Official objective coverage (Red Hat)</summary>
-
-- [ ] Configure networking components
-- [ ] Troubleshoot software defined networking
-- [ ] Create and edit external routes
-- [ ] Control cluster network ingress
-- [ ] Secure external and internal traffic using TLS certificates
-- [ ] Configure application network policies
-
-</details>
+**Theory** ([`objectives/05-network-security.md`](objectives/05-network-security.md))
 
 - [ ] **Lab 5.1:** [Edge route with TLS + HTTP redirect](objectives/05-network-security.md#lab-51--edge-route-with-tls--http-redirect-25-min)
 - [ ] **Lab 5.2:** [Passthrough route](objectives/05-network-security.md#lab-52--passthrough-route-25-min)
 - [ ] **Lab 5.3:** [NetworkPolicy fortress (ingress/egress)](objectives/05-network-security.md#lab-53--networkpolicy-fortress-30-min)
 - [ ] **Lab 5.4:** [Troubleshoot a 503](objectives/05-network-security.md#lab-54--troubleshoot-a-503-20-min)
-- [ ] **Lab 5.5:** [Internal TLS with service serving certificates](objectives/05-network-security.md#lab-55--internal-tls-with-service-serving-certificates-25-min)
-- **Key Commands:** `oc create route edge/passthrough/reencrypt`, `oc get endpointslices`, `oc apply -f networkpolicy.yaml`, `oc annotate service … service.beta.openshift.io/serving-cert-secret-name=…`.
+- **Key Commands:** `oc create route edge/passthrough/reencrypt`, `oc get endpoints`, `oc apply -f networkpolicy.yaml`.
 
 ## 🛠️ 6. Expose Non-HTTP/SNI Applications
 
-*Goal: Handle non-web traffic (e.g., databases).*
+*Goal: Handle non-web traffic (e.g., databases, gRPC, raw TCP).*
 
-**Theory** ([`06-expose-non-http-sni.md`](objectives/06-expose-non-http-sni.md)) - NodePort · LoadBalancer (cloud / MetalLB) · ExternalIP
-
-<details><summary>📋 Official objective coverage (Red Hat)</summary>
-
-- [ ] Configure a load balancer service
-- [ ] Configure external application access
-
-</details>
+**Theory** ([`objectives/06-expose-non-http-sni.md`](objectives/06-expose-non-http-sni.md))
 
 - [ ] **Lab 6.1:** [NodePort end-to-end](objectives/06-expose-non-http-sni.md#lab-61--nodeport-end-to-end-20-min)
 - [ ] **Lab 6.2:** [Service type LoadBalancer (cloud/MetalLB)](objectives/06-expose-non-http-sni.md#lab-62--loadbalancer-cloud-or-metallb-only-20-min)
@@ -165,17 +122,7 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 *Goal: Prevent resource exhaustion in a shared cluster.*
 
-**Theory** ([`07-developer-self-service.md`](objectives/07-developer-self-service.md)) - ResourceQuota · LimitRange · quota scopes · ClusterResourceQuota · project templates
-
-<details><summary>📋 Official objective coverage (Red Hat)</summary>
-
-- [ ] Configure cluster resource quotas
-- [ ] Configure project quotas
-- [ ] Configure project resource requirements
-- [ ] Configure project limit ranges
-- [ ] Configure project templates
-
-</details>
+**Theory** ([`objectives/07-developer-self-service.md`](objectives/07-developer-self-service.md))
 
 - [ ] **Lab 7.1:** [Quota that bites (ResourceQuota + LimitRange)](objectives/07-developer-self-service.md#lab-71--quota-that-bites-25-min)
 - [ ] **Lab 7.2:** [ClusterResourceQuota by label](objectives/07-developer-self-service.md#lab-72--clusterresourcequota-by-label-20-min)
@@ -187,15 +134,7 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 *Goal: Use the Operator Lifecycle Manager (OLM).*
 
-**Theory** ([`08-openshift-operators.md`](objectives/08-openshift-operators.md)) - OLM model · OperatorGroups · console & CLI install · manual approval · uninstall & full cleanup · catalog sources
-
-<details><summary>📋 Official objective coverage (Red Hat)</summary>
-
-- [ ] Install an operator
-- [ ] Uninstall an operator
-- [ ] Delete an operator
-
-</details>
+**Theory** ([`objectives/08-openshift-operators.md`](objectives/08-openshift-operators.md))
 
 - [ ] **Lab 8.1:** [Install an operator via the Console](objectives/08-openshift-operators.md#lab-81--install-via-console-15-min)
 - [ ] **Lab 8.2:** [Install an operator via the CLI](objectives/08-openshift-operators.md#lab-82--install-via-cli-20-min)
@@ -205,21 +144,9 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 ## 🛡️ 9. Configure Application Security (SCC)
 
-*Goal: Control pod permissions.*
+*Goal: Control pod permissions and run batch workloads.*
 
-**Theory** ([`09-application-security.md`](objectives/09-application-security.md)) - service accounts · SCCs · Pod Security Admission · privileged workloads · secrets · Jobs · CronJobs
-
-<details><summary>📋 Official objective coverage (Red Hat)</summary>
-
-- [ ] Configure and manage service accounts
-- [ ] Run privileged applications
-- [ ] Manage and apply permissions using security context constraints
-- [ ] Create and apply secrets to manage sensitive information
-- [ ] Configure application access to Kubernetes APIs
-- [ ] Deploy jobs to perform one-time tasks
-- [ ] Configure Kubernetes cron jobs
-
-</details>
+**Theory** ([`objectives/09-application-security.md`](objectives/09-application-security.md))
 
 - [ ] **Lab 9.1:** [SCC rescue mission](objectives/09-application-security.md#lab-91--scc-rescue-25-min)
 - [ ] **Lab 9.2:** [Service Accounts and API access](objectives/09-application-security.md#lab-92--sa--api-access-20-min)
@@ -229,9 +156,9 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 
 ## 💾 ★ Supplement — Persistent Storage (PV / PVC / SC)
 
-*Goal: Manage stateful workloads. Not a standalone objective on the current exam, but stateful apps still need PVCs.*
+*Goal: Manage stateful workloads. Dropped as a standalone objective after 4.14, but still surfaces inside "Deploy applications" and "Resource manifests" tasks.*
 
-**Theory** ([`10-storage-supplement.md`](objectives/10-storage-supplement.md)) - access modes · reclaim policy · dynamic & static provisioning · binding modes · resizing · StatefulSets · troubleshooting
+**Theory** ([`objectives/10-storage-supplement.md`](objectives/10-storage-supplement.md))
 
 - [ ] **Lab S.1:** [Dynamic provisioning with StorageClasses (PVC for Postgres)](objectives/10-storage-supplement.md#lab-s1--dynamic-pvc-for-postgres)
 - [ ] **Lab S.2:** [Static PV with a manual StorageClass](objectives/10-storage-supplement.md#lab-s2--static-pv-with-manual-sc)
@@ -240,25 +167,20 @@ This repository is a consolidated study resource for the **EX280** exam, merging
 - [ ] **Lab S.5:** [RWX shared volume](objectives/10-storage-supplement.md#lab-s5--rwx-shared-volume-only-if-your-lab-has-rwx-backend)
 - **Key Commands:** `oc get sc/pv/pvc`, `oc set volume`, `oc patch pvc`, `oc get storageclass`.
 
-> "Provision persistent storage volumes and use storage classes" appeared in the older (4.14-based) objective list but is not in the current one. This supplement covers it so you can complete tasks that need a PVC (Postgres, MySQL, etc.).
-
 ---
 
-<a id="what-changed"></a>
+## ⚠️ What changed vs. 4.14 (important if you're using older study repos)
 
-## ⚠️ What changed since 4.18 (and vs 4.14)
+When following older 4.14 material (`anishrana2001` or `mgonzalezo`), keep these **4.18 – 4.22** differences in mind:
 
-If you're following the `anishrana2001` or `mgonzalezo` material (both 4.14), or sitting a newer exam version, keep these differences in mind:
-
-| Topic | Older behavior | Current behavior |
-|-------|----------------|------------------|
-| Workload type | `DeploymentConfig` common in 4.x material | `DeploymentConfig` is **deprecated** (since 4.14); `oc new-app` creates a **`Deployment`** |
-| Cluster network | OpenShift SDN still available in 4.14 | **OVN-Kubernetes** is the only CNI (SDN removed in 4.17) |
-| Pod Security | — | **SCC is the gate that admits or rejects pods.** Pod Security Admission runs alongside it: global enforce stays `privileged`, and OpenShift's label syncer sets each user namespace's `warn`/`audit` labels from the SCCs its service accounts can use. "would violate PodSecurity" messages are usually warnings, not rejections |
-| Service endpoints | `oc get endpoints` | The Endpoints API is **deprecated** from Kubernetes 1.33 (OCP 4.20) and prints a warning; use `oc get endpointslices -l kubernetes.io/service-name=<svc>` |
-| Web console | Separate Administrator and Developer perspectives; *Operators → OperatorHub* | The Developer perspective is **off by default from 4.19**; newer consoles call OperatorHub the **Software Catalog** |
-| Helm | Helm 3, `HelmChartRepository` / `ProjectHelmChartRepository` CRDs | Same |
-| Community images | `docker.io/bitnami/*` widely used in labs | The free Bitnami catalog was **archived in Sept 2025** — prefer Red Hat / UBI / `quay.io/sclorg` images |
+| Topic | 4.14 behavior | 4.18 – 4.22 behavior |
+|-------|---------------|----------------------|
+| `oc new-app` default workload | Could create `DeploymentConfig` from S2I | Creates a **`Deployment`** by default; `DeploymentConfig` is **deprecated** |
+| Default OpenShift CNI | OpenShift SDN was still supported | **OVN-Kubernetes** is the **only** supported CNI (SDN removed in 4.17+) |
+| Pod Security | PSA admission active but warning-mostly | **Pod Security Admission (PSA)** enforces baseline & restricted profiles by default; pair PSA labels with SCC choices |
+| Kustomize labels | `commonLabels` widely used | Prefer `labels:` (`includeSelectors: false`) to avoid mutating immutable Deployment selectors |
+| Cluster updates | Console + CLI | Console + CLI + **EUS-to-EUS** updates (4.14→4.16→4.18→4.20→4.22) and per-NodePool MCP pausing |
+| Helm | Helm 3 (Cluster-scoped Helm Charts repo) | Helm 3, native `ProjectHelmChartRepository` CRD |
 
 Always default to `Deployment` over `DeploymentConfig` on the exam unless a question explicitly asks for the latter.
 
@@ -266,50 +188,47 @@ Always default to `Deployment` over `DeploymentConfig` on the exam unless a ques
 
 ## 📚 About the documentation links
 
-Every objective file has a **🔗 Docs to bookmark** section at the bottom, pointing at the 4.18 docs (links checked October 2026). OpenShift docs moved to **docs.redhat.com** on March 12, 2025. Old `docs.openshift.com` links are unreliable: since 4.18 several guides were split (networking became *Ingress and load balancing*, *Network security*, *Networking Operators*, …), so old paths often don't map to a current page. Use this base URL, swapping in your exam's version:
+Every objective file has a **🔗 Docs to bookmark** section at the bottom. All links resolve under the official Red Hat documentation portal:
 
+```text
+https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/
+https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/
 ```
-https://docs.redhat.com/en/documentation/openshift_container_platform/<version>/
-```
 
-During the exam you get the product documentation in a browser, with no other internet access. Practice navigating it **before** exam day so you can find pages without searching.
-
-If a specific page returns 404 (Red Hat occasionally renames pages between minor versions), go up to the guide's index page and use the left-hand navigation. For example, go to `…/html/building_applications/index` and find the page in the nav.
+These are the exact docs you'll have access to during the real EX280 exam (offline, in a browser tab). Open each link **before** exam day and practice navigating the left-hand menu tree so you can find YAML examples during the exam without relying on search engines.
 
 ---
 
 ## 📁 Repo structure
 
-```
+```text
 ex280/
-├── README.md                          ← you are here (curriculum + index)
 ├── LICENSE
+├── README.md                              ← Curriculum index & portfolio overview
 ├── objectives/
-│   ├── 01-manage-ocp.md               ← Manage OpenShift Container Platform
-│   ├── 02-resource-manifests.md       ← Resource manifests + Kustomize
-│   ├── 03-deploy-applications.md      ← Templates, Helm, services, routes, scaling
-│   ├── 04-auth-and-authorization.md   ← HTPasswd, users, groups, RBAC
-│   ├── 05-network-security.md         ← Routes (TLS), NetworkPolicy, ingress
-│   ├── 06-expose-non-http-sni.md      ← LoadBalancer / NodePort / ExternalIP
-│   ├── 07-developer-self-service.md   ← Quotas, limit ranges, project templates
-│   ├── 08-openshift-operators.md      ← OLM, install/uninstall/delete operators
-│   ├── 09-application-security.md     ← SCCs, service accounts, secrets, jobs/cronjobs
-│   └── 10-storage-supplement.md       ← PV/PVC/StorageClass (supplement, not a current objective)
+│   ├── 01-manage-ocp.md                   ← Manage OpenShift Container Platform
+│   ├── 02-resource-manifests.md           ← Resource manifests + Kustomize
+│   ├── 03-deploy-applications.md          ← Templates, Helm, services, routes, scaling
+│   ├── 04-auth-and-authorization.md       ← HTPasswd, users, groups, RBAC
+│   ├── 05-network-security.md             ← Routes (TLS), NetworkPolicy, ingress
+│   ├── 06-expose-non-http-sni.md          ← LoadBalancer / NodePort / non-HTTP
+│   ├── 07-developer-self-service.md       ← Quotas, limit ranges, project templates
+│   ├── 08-openshift-operators.md          ← OLM, install/uninstall/delete operators
+│   ├── 09-application-security.md         ← SCCs, service accounts, secrets, jobs/cronjobs
+│   └── 10-storage-supplement.md           ← PV/PVC/StorageClass supplement
 ├── mock-exams/
-│   └── week1-mock.md                  ← 30 min, Obj 1–2
-└── drafts/                            ← work in progress, not part of the study path
+│   └── week1-mock.md                      ← 30 min timed mock (Objectives 1–2)
+└── platform-lab/                          ← SRE & AI Platform Engineering Portfolio
+    └── 01-cluster-diagnostics/            ← Module 1: AI Cluster Pre-Flight & Readiness Auditor
 ```
-
-*Planned:* exam overview, lab setup guide, one-page cheatsheet, resources list, mock exams for weeks 2–4 and a full 3-hour final.
 
 ## ✅ How to use this repo
 
-1. **Stand up your lab first.** Don't postpone this. Options: OpenShift Local (CRC) on a laptop with 16 GB+ RAM, a single-node cluster, or the Developer Sandbox (no cluster-admin, so many labs won't work there).
-2. **Read one objective file at a time.** Each ends with labs (most with hidden solutions) and a "Drills" block — actually do them.
-3. **Type every command yourself.** Muscle memory beats reading. Especially imperative `oc` commands with `--dry-run=client -o yaml`.
-4. **At the exam you only get the official OpenShift docs.** Practice navigating <https://docs.redhat.com/en/documentation/openshift_container_platform/> now.
-5. **Take every mock exam under exam conditions:** timer running, docs tab only, no Google, no AI.
-6. **After each mock, journal what you missed** and add a row to the bottom of the relevant objective file in a "Gaps" section.
+1. **Stand up your lab first.** CRC 2.x (OpenShift Local) runs a single-node OCP cluster on a workstation with 16+ GB RAM.
+2. **Read one objective file at a time.** Each ends with labs (with hidden solutions) and a "Drills" block—actually run them.
+3. **Build the companion `platform-lab/` challenge.** Research the docs, write your own solution, validate it on the cluster, and commit it as portfolio code.
+4. **Type every command yourself.** Muscle memory beats reading—especially imperative `oc` commands with `--dry-run=client -o yaml`.
+5. **Take every mock exam under exam conditions:** timer running, official docs tab only, no Google, no AI.
 
 ---
 
@@ -320,9 +239,9 @@ Before the exam, ensure you can:
 1. Create a user, add them to a group, and give that group `admin` rights to a project.
 2. Fix a broken deployment by checking logs and events.
 3. Secure a route using a provided SSL certificate (edge / passthrough / re-encrypt).
-4. Limit a project to only 5 pods and 2Gi of RAM with a ResourceQuota + LimitRange.
+4. Limit a project to only 5 pods and 2Gi of RAM with a `ResourceQuota` + `LimitRange`.
 5. Install an operator from the CLI and confirm its CSV reaches `Succeeded`.
-6. Grant a pod the least-permissive SCC it needs via a ServiceAccount.
+6. Grant a pod the least-permissive SCC it needs via a dedicated `ServiceAccount`.
 7. Lock down self-provisioning and set a custom project-request message.
 8. Deploy a stateful app backed by a dynamically-provisioned PVC that survives a pod delete.
 
@@ -330,22 +249,15 @@ Before the exam, ensure you can:
 
 ## 🎓 Passing score & exam logistics
 
-- **Duration:** 3 hours
+- **Duration:** 3 hours, single section
 - **Passing score:** 210 / 300 (70%)
-- **Format:** Hands-on, performance-based on a live OpenShift cluster; no multiple-choice questions
-- **Version:** based on OCP 4.22 per Red Hat's exam page; multiple versions are in use, so check your booking
-- **Reference allowed:** Official product documentation only — no internet, no notes
-- **Persistence rule:** Everything must keep working without manual intervention, including after a reboot
-- **Results:** emailed, usually within 3 U.S. business days; only the total score is reported
+- **Format:** Performance-based on a live OpenShift cluster (OCP 4.18 / 4.22)
+- **Reference allowed:** Official OpenShift documentation only—no internet, no notes
+- **Persistence rule:** Everything must survive a node reboot
 
 ---
 
 **Credits & References:**
 - [Official Red Hat EX280 Objectives](https://www.redhat.com/en/services/training/red-hat-certified-openshift-administrator-exam)
-- [OpenShift Container Platform documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/)
 - [anishrana2001/Openshift](https://github.com/anishrana2001/Openshift)
 - [mgonzalezo/RedHat_ex280](https://github.com/mgonzalezo/RedHat_ex280)
-
-Good luck — see you on the other side of the cert. 🏅
-
-— Maintainer notes: `oc` examples and YAMLs were written for **OCP 4.18 / oc client 4.18+** and are being reviewed against newer releases. If you spot drift, file an issue.
