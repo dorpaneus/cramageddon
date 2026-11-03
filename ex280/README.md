@@ -1,6 +1,6 @@
 # EX280 - Red Hat Certified System Administrator in OpenShift (Study Plan & SRE Portfolio)
 
-This repository is a consolidated study resource and hands-on SRE/Platform Engineering portfolio for the **EX280** exam, merging the official Red Hat objectives with hands-on labs and OpenShift Container Platform (OCP) **4.18 – 4.22** documentation. Each objective file contains `.yaml` manifests, `oc` command cheatsheets, and step-by-step labs (each lab has a hidden worked solution).
+This repository is a consolidated study resource and hands-on SRE/Platform Engineering portfolio for the **EX280** exam, merging the official Red Hat objectives with hands-on labs and OpenShift Container Platform (OCP) **4.18 - 4.22** documentation. Each objective file contains `.yaml` manifests, `oc` command cheatsheets, and step-by-step labs (each lab has a hidden worked solution).
 
 > **🎯 Target version: OpenShift Container Platform 4.18 – 4.22 (Current EX280 Baseline).**
 > Merged & sorted from:
