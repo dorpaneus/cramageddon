@@ -1,3 +1,9 @@
+<div align="center">
+
+[🏠 Home](../README.md) &nbsp;·&nbsp; [Next: Work with Resource Manifests ➡️](./02-resource-manifests.md)
+
+</div>
+
 # Objective 1 - Manage OpenShift Container Platform
 
 > **Exam study points (verbatim from Red Hat EX280 v4.18–4.22):**
